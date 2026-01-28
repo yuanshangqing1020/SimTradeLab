@@ -32,10 +32,10 @@ def initialize(context):
     log.info("=" * 60)
     log.info("简单双均线测试策略")
     log.info("=" * 60)
-    log.info(f"短期均线: {context.short_window} 日")
-    log.info(f"长期均线: {context.long_window} 日")
-    log.info(f"最大持仓: {context.max_stocks} 只")
-    log.info(f"测试股票: {context.test_stocks}")
+    log.info("短期均线: {} 日".format(context.short_window))
+    log.info("长期均线: {} 日".format(context.long_window))
+    log.info("最大持仓: {} 只".format(context.max_stocks))
+    log.info("测试股票: {}".format(context.test_stocks))
     log.info("=" * 60)
 
 
@@ -78,12 +78,12 @@ def handle_data(context, data):
                 # 等权重买入
                 target_value = context.portfolio.portfolio_value / context.max_stocks
                 order_value(stock, target_value)
-                log.info(f"[买入信号] {stock} 短期MA={short_ma:.2f} > 长期MA={long_ma:.2f}")
+                log.info("[买入信号] {} 短期MA={:.2f} > 长期MA={:.2f}".format(stock, short_ma, long_ma))
 
         # 死叉：卖出信号
         elif short_ma < long_ma and stock in current_stocks:
             order_target(stock, 0)
-            log.info(f"[卖出信号] {stock} 短期MA={short_ma:.2f} < 长期MA={long_ma:.2f}")
+            log.info("[卖出信号] {} 短期MA={:.2f} < 长期MA={:.2f}".format(stock, short_ma, long_ma))
 
 
 def after_trading_end(context, data):
@@ -92,6 +92,6 @@ def after_trading_end(context, data):
     positions = context.portfolio.positions
     position_count = sum(1 for pos in positions.values() if pos.amount > 0)
 
-    log.info(f"日终总资产: {context.portfolio.portfolio_value:.2f} | "
-             f"持仓数: {position_count} | "
-             f"现金: {context.portfolio.cash:.2f}")
+    log.info("日终总资产: {:.2f} | "
+             "持仓数: {} | "
+             "现金: {:.2f}".format(context.portfolio.portfolio_value, position_count, context.portfolio.cash))
