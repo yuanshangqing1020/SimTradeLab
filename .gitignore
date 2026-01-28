@@ -74,4 +74,5 @@ GEMINI.md
 data/*.h5
 data/.keys_cache
 strategies/*/optimization/results
+data/
 
