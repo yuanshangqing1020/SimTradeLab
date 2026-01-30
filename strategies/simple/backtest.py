@@ -37,6 +37,7 @@ def initialize(context):
     log.info("最大持仓: {} 只".format(context.max_stocks))
     log.info("测试股票: {}".format(context.test_stocks))
     log.info("=" * 60)
+    context.day_count = 0
 
 
 def before_trading_start(context, data):
@@ -46,6 +47,7 @@ def before_trading_start(context, data):
 
 def handle_data(context, data):
     """主策略逻辑"""
+    context.day_count += 1
 
     # 获取当前持仓
     positions = context.portfolio.positions
@@ -63,15 +65,26 @@ def handle_data(context, data):
             is_dict=True
         )
 
-        if stock not in hist or len(hist[stock]) < context.long_window:
-            continue
+        if stock not in hist:
+             log.info("{} not in hist".format(stock))
+             continue
+        
+        # is_dict=True 返回格式为 {stock: {field: array}}
+        # 获取收盘价数组
+        if isinstance(hist[stock], dict) and 'close' in hist[stock]:
+            prices = hist[stock]['close']
+        else:
+            # 兼容其他返回格式
+            prices = hist[stock]
 
-        prices = hist[stock]
+        if len(prices) < context.long_window:
+             log.info("{} history length {} < {}".format(stock, len(prices), context.long_window))
+             continue
 
         # 计算均线
         short_ma = sum(prices[-context.short_window:]) / context.short_window
         long_ma = sum(prices[-context.long_window:]) / context.long_window
-
+        
         # 金叉：买入信号
         if short_ma > long_ma and stock not in current_stocks:
             if len(current_stocks) < context.max_stocks:
