@@ -24,11 +24,12 @@ from typing import Optional, Any, Callable
 
 from .lifecycle_controller import PTradeLifecycleError
 from ..utils.paths import get_project_root
-from simtradelab.ptrade.object import Position
+from simtradelab.ptrade.object import Position, _load_data_chunk
 from .order_processor import OrderProcessor
 from .cache_manager import cache_manager
 from .config_manager import config
 from simtradelab.utils.perf import timer
+from joblib import Parallel, delayed
 
 
 def validate_lifecycle(func: Callable) -> Callable:
@@ -95,15 +96,15 @@ class PtradeAPI:
                 stock_df = self.data_context.stock_data_dict[stock]
                 if isinstance(stock_df, pd.DataFrame) and isinstance(stock_df.index, pd.DatetimeIndex):
                     date_dict = {date: idx for idx, date in enumerate(stock_df.index)}
-                    sorted_dates = list(stock_df.index)
-                    self._stock_date_index[stock] = (date_dict, sorted_dates)
+                sorted_dates = stock_df.index
+                self._stock_date_index[stock] = (date_dict, sorted_dates)
             except:
                 pass
 
         self._prebuilt_index = True
         print(f"  完成！已构建 {len(self._stock_date_index)} 只股票的索引")
 
-    def get_stock_date_index(self, stock: str) -> tuple[dict, list]:
+    def get_stock_date_index(self, stock: str) -> tuple[dict, pd.Index]:
         """获取股票日期索引，返回 (date_dict, sorted_dates) 元组"""
         if stock not in self._stock_date_index:
             # 延迟构建单只股票索引
@@ -116,7 +117,7 @@ class PtradeAPI:
 
             if stock_df is not None and isinstance(stock_df, pd.DataFrame) and isinstance(stock_df.index, pd.DatetimeIndex):
                 date_dict = {date: idx for idx, date in enumerate(stock_df.index)}
-                sorted_dates = list(stock_df.index)
+                sorted_dates = stock_df.index
                 self._stock_date_index[stock] = (date_dict, sorted_dates)
             else:
                 self._stock_date_index[stock] = ({}, [])
@@ -189,6 +190,8 @@ class PtradeAPI:
         listed = pd.to_datetime(self.data_context.stock_metadata['listed_date'], format='mixed') <= target_date
         not_delisted = (
             (self.data_context.stock_metadata['de_listed_date'] == '2900-01-01') |
+            (self.data_context.stock_metadata['de_listed_date'] == '') |
+            (self.data_context.stock_metadata['de_listed_date'].isnull()) |
             (pd.to_datetime(self.data_context.stock_metadata['de_listed_date'], errors='coerce', format='mixed') > target_date)
         )
 
@@ -270,7 +273,8 @@ class PtradeAPI:
 
     # 定义字段所属表的映射
     FUNDAMENTAL_TABLES = {
-        'valuation': ['pe_ttm', 'pb', 'ps_ttm', 'pcf', 'total_value', 'float_value'],
+        'valuation': ['pe_ttm', 'pb', 'ps_ttm', 'pcf', 'total_value', 'float_value', 'turnover_rate'],
+        'income': ['netProfit', 'MBRevenue'],
         'profit_ability': ['roe', 'roa', 'gross_income_ratio', 'net_profit_ratio',
                            'roe_ttm', 'roa_ttm', 'gross_income_ratio_ttm', 'net_profit_ratio_ttm'],
         'growth_ability': ['operating_revenue_grow_rate', 'net_profit_grow_rate',
@@ -324,7 +328,8 @@ class PtradeAPI:
         if cache_key not in self._fundamentals_cache:
             self._fundamentals_cache[cache_key] = {}
             # 限制缓存条目数量
-            if len(self._fundamentals_cache) > 500:
+            max_cache = config.cache.fundamentals_cache_size if hasattr(config, 'cache') else 500
+            if len(self._fundamentals_cache) > max_cache:
                 self._fundamentals_cache.pop(next(iter(self._fundamentals_cache)))
 
         date_indices = self._fundamentals_cache[cache_key]
@@ -333,6 +338,32 @@ class PtradeAPI:
         stocks_to_index = [s for s in stocks if s not in date_indices and s in data_dict]
 
         if stocks_to_index:
+            # 性能优化：如果需要加载大量数据且data_dict支持延迟加载，尝试并行预加载
+            if len(stocks_to_index) > 100 and hasattr(data_dict, 'store') and hasattr(data_dict, 'prefix') and hasattr(data_dict, '_cache'):
+                # 找出未缓存的股票
+                stocks_to_load = [s for s in stocks_to_index if s not in data_dict._cache]
+                
+                if len(stocks_to_load) > 50:
+                    try:
+                        filename = data_dict.store.filename
+                        prefix = data_dict.prefix
+                        n_jobs = config.performance.num_processes if hasattr(config, 'performance') else 4
+                        
+                        # 分块
+                        chunk_size = max(1, len(stocks_to_load) // n_jobs)
+                        chunks = [stocks_to_load[i:i + chunk_size] for i in range(0, len(stocks_to_load), chunk_size)]
+                        
+                        # 并行加载
+                        results = Parallel(n_jobs=n_jobs, backend='loky')(
+                            delayed(_load_data_chunk)(filename, prefix, chunk) for chunk in chunks
+                        )
+                        
+                        # 更新缓存
+                        for res in results:
+                            data_dict._cache.update(res)
+                    except Exception as e:
+                        print(f"并行加载数据失败: {e}")
+
             for stock in stocks_to_index:
                 try:
                     df = data_dict[stock]
@@ -341,9 +372,10 @@ class PtradeAPI:
 
                     # 对于fundamentals表，使用publ_date过滤
                     if table != 'valuation' and 'publ_date' in df.columns:
-                        # 过滤出查询日期前已公告的财报（不修改原DataFrame）
-                        publ_dates = pd.to_datetime(df['publ_date'], errors='coerce')
-                        valid_mask = publ_dates <= query_ts
+                        # 优化：直接使用列比较，避免pd.to_datetime转换（假设数据已为datetime类型）
+                        # publ_dates = pd.to_datetime(df['publ_date'], errors='coerce')
+                        # valid_mask = publ_dates <= query_ts
+                        valid_mask = df['publ_date'] <= query_ts
                         valid_indices = df.index[valid_mask]
 
                         if len(valid_indices) > 0:
@@ -458,9 +490,14 @@ class PtradeAPI:
                     continue
 
                 try:
-                    date_dict, _ = self.get_stock_date_index(stock)
-                    current_idx = date_dict.get(end_dt) or stock_df.index.get_loc(end_dt)
-                except:
+                    date_dict, sorted_dates = self.get_stock_date_index(stock)
+                    if end_dt in date_dict:
+                        current_idx = date_dict[end_dt]
+                    else:
+                        # 如果找不到精确日期，使用searchsorted找到插入位置
+                        # 这将返回end_dt之前的最新数据的索引（符合get_price count模式的语义）
+                        current_idx = sorted_dates.searchsorted(end_dt)
+                except Exception as e:
                     continue
 
                 slice_df = stock_df.iloc[max(0, current_idx - count):current_idx]
@@ -970,13 +1007,42 @@ class PtradeAPI:
         if amount == 0:
             return None
 
-        # 使用blotter创建订单
-        if self.context and self.context.blotter:
-            order = self.context.blotter.create_order(security, amount)
-            if limit_price is not None:
-                order.limit = limit_price
-            return order.id
-        return None
+        # 使用OrderProcessor处理订单
+        if not hasattr(self, '_order_processor'):
+            self._order_processor = OrderProcessor(
+                self.context, self.data_context,
+                self.get_stock_date_index, self.log
+            )
+
+        # 获取执行价格（根据买卖方向计算滑点）
+        is_buy = amount > 0
+        execution_price = self._order_processor.get_execution_price(security, limit_price, is_buy)
+        
+        if execution_price is None:
+            self.log.warning("订单失败 {} | 原因: 无法获取价格".format(security))
+            return None
+
+        # 检查涨跌停
+        limit_status = self.check_limit(security, self.context.current_dt)[security]
+        if not self._order_processor.check_limit_status(security, amount, limit_status):
+            return None
+
+        # 创建订单
+        order_id, order = self._order_processor.create_order(security, amount, execution_price)
+
+        success = False
+        if amount > 0:
+            self.log.info("生成订单，订单号:{}，股票代码：{}，数量：买入{}股".format(order_id, security, amount))
+            success = self._order_processor.execute_buy(security, amount, execution_price)
+        else:
+            self.log.info("生成订单，订单号:{}，股票代码：{}，数量：卖出{}股".format(order_id, security, abs(amount)))
+            success = self._order_processor.execute_sell(security, abs(amount), execution_price)
+
+        if success:
+            order.status = '8'
+            order.filled = amount
+
+        return order.id if success else None
 
     @validate_lifecycle
     def order_target(self, security: str, amount: int, limit_price: float = None) -> Optional[str]:

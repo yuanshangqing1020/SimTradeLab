@@ -76,3 +76,6 @@ data/.keys_cache
 strategies/*/optimization/results
 data/
 
+debug_*.py
+output.txt
+debug_data/

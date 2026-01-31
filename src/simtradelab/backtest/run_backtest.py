@@ -26,7 +26,7 @@ if __name__ == '__main__':
     # ==================== 回测配置 ====================
 
     # 策略名称
-    strategy_name = 'simple'
+    strategy_name = 'compliant_small_cap'
 
     # 回测周期
     start_date = '2025-01-01'
