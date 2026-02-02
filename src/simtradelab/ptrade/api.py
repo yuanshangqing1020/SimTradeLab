@@ -1095,13 +1095,35 @@ class PtradeAPI:
         if amount == 0:
             return None
 
-        # 使用blotter创建订单
-        if self.context and self.context.blotter:
-            order = self.context.blotter.create_order(security, amount)
-            if limit_price is not None:
-                order.limit = limit_price
-            return order.id
-        return None
+        # 获取执行价格
+        is_buy = amount > 0
+        execution_price = self.order_processor.get_execution_price(security, limit_price, is_buy)
+        
+        if execution_price is None:
+            self.log.warning(f"订单失败 {security} | 原因: 无法获取价格")
+            return None
+
+        # 检查涨跌停
+        limit_status = self.check_limit(security, self.context.current_dt).get(security, 0)
+        if not self.order_processor.check_limit_status(security, amount, limit_status):
+            return None
+
+        # 创建订单
+        order_id, order = self.order_processor.create_order(security, amount, execution_price)
+
+        # 执行交易
+        if is_buy:
+            self.log.info("生成订单，订单号:{}，股票代码：{}，数量：买入{}股".format(order_id, security, amount))
+            success = self.order_processor.execute_buy(security, amount, execution_price)
+        else:
+            self.log.info("生成订单，订单号:{}，股票代码：{}，数量：卖出{}股".format(order_id, security, abs(amount)))
+            success = self.order_processor.execute_sell(security, abs(amount), execution_price)
+
+        if success:
+            order.status = '8'
+            order.filled = amount
+
+        return order.id if success else None
 
     @validate_lifecycle
     def order_target(self, security: str, amount: int, limit_price: float = None) -> Optional[str]:
