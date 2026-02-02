@@ -114,8 +114,14 @@ def run_mining(index_code='000300.SS', start_date='2024-01-01', end_date='2024-1
             # 价格变动幅度
             price_change = (closes[-1] - closes[0]) / closes[0]
             
-            # 评分公式
-            score = grid_yield 
+            # 评分公式优化：
+            # 原始逻辑：score = grid_yield (倾向于单边上涨)
+            # 新逻辑：score = grid_yield / (abs(price_change) + 0.1)
+            # 含义：单位趋势下的网格收益率。
+            # 如果股价翻倍(price_change=1.0)，分母为1.1，grid_yield需要很高才能得分高
+            # 如果股价震荡回归(price_change=0.0)，分母为0.1，grid_yield被放大10倍
+            # 加上 0.1 是为了避免分母过小，同时不过分惩罚小幅涨跌
+            score = grid_yield / (abs(price_change) + 0.1)
             
             results.append({
                 'code': stock,
@@ -155,12 +161,12 @@ def run_mining(index_code='000300.SS', start_date='2024-01-01', end_date='2024-1
     names = get_stock_name(top_stocks)
     
     print("\n====== 挖掘结果 (Top {}) ======".format(top_n))
-    print(f"{'代码':<10} {'名称':<10} {'网格收益':<10} {'穿越次数':<10} {'波动率':<10} {'区间涨跌':<10}")
+    print(f"{'代码':<10} {'名称':<10} {'评分':<10} {'网格收益':<10} {'穿越次数':<10} {'波动率':<10} {'区间涨跌':<10}")
     
     for idx, row in res_df.head(top_n).iterrows():
         code = row['code']
         name = names.get(code, 'Unknown')
-        print(f"{code:<10} {name:<10} {row['grid_yield']:.2%}     {row['crossings']:<10} {row['volatility']:.2%}     {row['price_change']:.2%}")
+        print(f"{code:<10} {name:<10} {row['score']:.2f}       {row['grid_yield']:.2%}     {row['crossings']:<10} {row['volatility']:.2%}     {row['price_change']:.2%}")
         
     return res_df
 
