@@ -61,6 +61,8 @@ class DataServer:
 
         self.index_constituents = {}
         self.stock_status_history = {}
+        self.listed_date_ts = None
+        self.de_listed_date_ts = None
 
         # 记录已加载的数据类型
         self._loaded_data_types = set()
@@ -138,6 +140,20 @@ class DataServer:
                 self.stock_metadata.set_index('symbol', inplace=True)
         else:
             self.stock_metadata = pd.DataFrame()
+
+        # 预解析 stock_metadata 日期列为 Timestamp（优化 get_Ashares 性能）
+        if self.stock_metadata is not None and not self.stock_metadata.empty:
+            if 'listed_date' in self.stock_metadata.columns:
+                self.listed_date_ts = pd.to_datetime(self.stock_metadata['listed_date'], format='mixed', errors='coerce')
+            else:
+                self.listed_date_ts = None
+            if 'de_listed_date' in self.stock_metadata.columns:
+                self.de_listed_date_ts = pd.to_datetime(self.stock_metadata['de_listed_date'], format='mixed', errors='coerce')
+            else:
+                self.de_listed_date_ts = None
+        else:
+            self.listed_date_ts = None
+            self.de_listed_date_ts = None
 
         # 加载基准数据
         benchmark_data_raw = storage.load_metadata(self.data_path, 'benchmark')
