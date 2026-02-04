@@ -63,10 +63,14 @@ def handle_data(context, data):
             is_dict=True
         )
 
-        if stock not in hist or len(hist[stock]) < context.long_window:
+        if stock not in hist:
             continue
 
-        prices = hist[stock]
+        # extracted the price array (hist[stock] is a dict like {'close': array})
+        prices = hist[stock]['close']
+
+        if len(prices) < context.long_window:
+            continue
 
         # 计算均线
         short_ma = sum(prices[-context.short_window:]) / context.short_window
