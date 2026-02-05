@@ -320,6 +320,8 @@ class PtradeAPI:
     # 定义字段所属表的映射
     FUNDAMENTAL_TABLES = {
         'valuation': ['pe_ttm', 'pb', 'ps_ttm', 'pcf', 'total_value', 'float_value'],
+        'income': ['operating_revenue', 'operating_cost', 'finance_expense', 'operating_profit', 
+                   'total_profit', 'net_profit', 'np_parent_company', 'basic_eps', 'publ_date'],
         'profit_ability': ['roe', 'roa', 'gross_income_ratio', 'net_profit_ratio',
                            'roe_ttm', 'roa_ttm', 'gross_income_ratio_ttm', 'net_profit_ratio_ttm'],
         'growth_ability': ['operating_revenue_grow_rate', 'net_profit_grow_rate',
@@ -409,9 +411,8 @@ class PtradeAPI:
                         idx = df.index.searchsorted(query_ts, side='left')
                         if idx > 0:
                             date_indices[stock] = idx - 1
-                        elif len(df.index) > 0:
-                            # 如果查询日期早于所有数据，返回第一条
-                            date_indices[stock] = 0
+                        # 如果查询日期早于所有数据，不应返回未来数据，直接跳过
+                        # (原逻辑: elif len(df.index) > 0: date_indices[stock] = 0 会导致严重的未来函数)
                 except Exception as e:
                     # 静默忽略错误，继续处理其他股票
                     continue
@@ -550,8 +551,14 @@ class PtradeAPI:
                     date_dict, _ = self.get_stock_date_index(stock)
                     current_idx = date_dict.get(end_dt)
                     if current_idx is None:
-                        current_idx = stock_df.index.get_loc(end_dt)
-                except (KeyError, IndexError):
+                        # end_dt 不是交易日，寻找最近的前一个交易日
+                        # 使用 searchsorted 查找插入位置 (side='right' 返回 > end_dt 的第一个位置)
+                        # 减 1 得到 <= end_dt 的最后一个位置
+                        current_idx = stock_df.index.searchsorted(end_dt, side='right') - 1
+                        if current_idx < 0:
+                            # 请求日期在数据开始之前
+                            continue
+                except (KeyError, IndexError, TypeError):
                     continue
 
                 # Ptrade API语义: count=N 返回截止到end_date的N天数据（包含end_date）
@@ -1281,7 +1288,26 @@ class PtradeAPI:
             return None
 
         # 使用 order_value 下单
-        return self.order_value(security, delta_value, limit_price)
+        if delta_value > 0:
+            return self.order_value(security, delta_value, limit_price)
+        else:
+            # order_value 暂时不支持卖出（负数），需要手动计算数量并调用 order
+            # 获取执行价格
+            execution_price = self.order_processor.get_execution_price(security, limit_price, is_buy=False)
+            if execution_price is None:
+                self.log.warning(f"订单失败 {security} | 原因: 无法获取价格")
+                return None
+            
+            # 确定最小交易单位
+            min_lot = 200 if security.startswith('688') else 100
+            
+            # 计算卖出数量（负数）
+            amount = int(delta_value / execution_price / min_lot) * min_lot
+            
+            if amount == 0:
+                return None
+                
+            return self.order(security, amount, limit_price)
 
     def get_open_orders(self) -> list:
         """获取未成交订单"""

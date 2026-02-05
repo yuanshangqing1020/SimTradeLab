@@ -209,11 +209,11 @@ class DataServer:
 
         # 财务数据
         if 'fundamentals' in required_data:
-            print("[3] 财务数据（{}只，延迟加载）...".format(len(self._fundamentals_keys_cache)))
+            print("[3] 财务数据（{}只）...".format(len(self._fundamentals_keys_cache)))
             from ..ptrade.config_manager import config
             self.fundamentals_dict = LazyDataDict(
                 self.data_path, 'fundamentals', self._fundamentals_keys_cache,
-                preload=False,
+                preload=True,
                 max_cache_size=config.cache.fundamentals_cache_size
             )
         else:
@@ -222,11 +222,11 @@ class DataServer:
 
         # 除权数据
         if 'exrights' in required_data:
-            print("[4] 除权数据（{}只，延迟加载）...".format(len(self._exrights_keys_cache)))
+            print("[4] 除权数据（{}只）...".format(len(self._exrights_keys_cache)))
             from ..ptrade.config_manager import config
             self.exrights_dict = LazyDataDict(
                 self.data_path, 'exrights', self._exrights_keys_cache,
-                preload=False,
+                preload=True,
                 max_cache_size=config.cache.exrights_cache_size
             )
         else:
