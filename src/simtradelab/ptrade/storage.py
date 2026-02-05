@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 import pandas as pd
+import json
 from pathlib import Path
 
 
@@ -170,6 +171,12 @@ def _load_metadata_parquet(metadata_dir, base_name):
         ic_file = metadata_dir / 'index_constituents.parquet'
         if ic_file.exists():
             ic_df = pd.read_parquet(ic_file)
+            if not ic_df.empty and 'symbols' in ic_df.columns and isinstance(ic_df['symbols'].iloc[0], str):
+                try:
+                    ic_df['symbols'] = ic_df['symbols'].apply(json.loads)
+                except Exception:
+                    pass
+
             index_constituents = {}
             for date, group in ic_df.groupby('date'):
                 index_constituents[date] = dict(zip(group['index_code'], group['symbols']))
@@ -179,6 +186,12 @@ def _load_metadata_parquet(metadata_dir, base_name):
         ss_file = metadata_dir / 'stock_status.parquet'
         if ss_file.exists():
             ss_df = pd.read_parquet(ss_file)
+            if not ss_df.empty and 'symbols' in ss_df.columns and isinstance(ss_df['symbols'].iloc[0], str):
+                try:
+                    ss_df['symbols'] = ss_df['symbols'].apply(json.loads)
+                except Exception:
+                    pass
+
             stock_status_history = {}
             for date, group in ss_df.groupby('date'):
                 stock_status_history[date] = {'ST': {}, 'HALT': {}, 'DELISTING': {}}
