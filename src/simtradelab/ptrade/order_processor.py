@@ -71,23 +71,10 @@ class OrderProcessor:
                 date_dict, _ = self.get_stock_date_index(stock)
                 idx = date_dict.get(self.context.current_dt)
                 if idx is None:
-                    # 如果精确匹配失败（可能是非交易日或数据缺失），尝试使用 searchsorted 获取最近的前一个交易日
-                    # 注意：回测时 current_dt 通常是交易日，但个股可能停牌或数据对齐有问题
-                    # side='right' 返回插入点，index[i-1] <= current_dt < index[i]
-                    idx_loc = stock_df.index.searchsorted(self.context.current_dt, side='right')
-                    if idx_loc > 0:
-                        idx = idx_loc - 1
-                        # 检查找到的日期是否与当前日期相差过大（例如超过10天），避免使用了太旧的数据
-                        nearest_date = stock_df.index[idx]
-                        days_diff = (pd.Timestamp(self.context.current_dt) - nearest_date).days
-                        if days_diff > 10:
-                            # 数据太旧，视为停牌或已退市
-                            self.log.warning(f"【DEBUG】{stock} 数据太旧: 当前{self.context.current_dt} 最近{nearest_date} 差{days_diff}天")
-                            return None
-                    else:
-                        # 找不到更早的数据
-                        self.log.warning(f"【DEBUG】{stock} 无历史数据: 当前{self.context.current_dt} Start{stock_df.index[0] if not stock_df.empty else 'Empty'}")
-                        return None
+                    # 严格模式：如果当日无数据（精确匹配失败），视为停牌，禁止交易
+                    # 不允许使用历史价格填充（Fill Forward），避免穿越停牌期交易
+                    # self.log.debug(f"{stock} 当日({self.context.current_dt})无行情数据(停牌)，无法交易")
+                    return None
                         
                 price = stock_df.iloc[idx]['close']
 
