@@ -79,6 +79,13 @@ def get_api():
 
 def get_Ashares(date=None):
     return get_api().get_Ashares(date)
+
+
+def get_etf_list(date=None):
+    """获取ETF列表"""
+    return get_api().get_etf_list(date)
+
+
 # 便捷函数
 def get_index_stocks(index_code, date=None):
     """获取指数成分股"""
@@ -142,6 +149,7 @@ __all__ = [
     'init_api',
     'get_api',
     'get_Ashares',
+    'get_etf_list',
     'get_index_stocks',
     'get_stock_info',
     'get_stock_name',

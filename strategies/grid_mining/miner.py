@@ -76,17 +76,26 @@ def run_mining(index_code='000300.SS', start_date='2024-01-01', end_date='2024-1
     # 初始化API
     init_api(required_data={'price'})
     
-    # 获取成分股
-    stocks = get_index_stocks(index_code, end_date)
-    print(f"获取到 {len(stocks)} 只股票 (指数: {index_code})")
+    # # 获取成分股
+    # stocks = get_index_stocks(index_code, end_date)
+    # print(f"获取到 {len(stocks)} 只股票 (指数: {index_code})")
     
-    if len(stocks) == 0:
-        print("尝试获取所有A股...")
-        stocks = get_Ashares(end_date)
-        print(f"获取到 {len(stocks)} 只A股")
-        # 调试模式：只取前100只测试 (如需全量跑请注释掉下行)
-        # stocks = stocks[:100]
+    # if len(stocks) == 0:
+    #     print("尝试获取所有A股...")
+    #     stocks = get_Ashares(end_date)
+    #     print(f"获取到 {len(stocks)} 只A股")
+    #     # 调试模式：只取前100只测试 (如需全量跑请注释掉下行)
+    #     # stocks = stocks[:100]
     
+    # 获取全市场标的 (A股 + ETF)
+    stocks = get_Ashares(end_date)
+    etfs = get_etf_list(end_date)
+    
+    # 合并并去重
+    all_targets = sorted(list(set(stocks + etfs)))
+    print(f"获取到 {len(all_targets)} 只标的 (其中 ETF: {len(etfs)})")
+    stocks = all_targets
+        
     if len(stocks) == 0:
         print("未获取到任何股票，请检查数据源。")
         return

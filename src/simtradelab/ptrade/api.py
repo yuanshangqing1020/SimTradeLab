@@ -237,6 +237,12 @@ class PtradeAPI:
 
         return self.data_context.stock_metadata[listed & not_delisted].index.tolist()
 
+    def get_etf_list(self, date: str = None) -> list[str]:
+        """返回ETF代码列表"""
+        all_codes = self.get_Ashares(date)
+        etfs = [code for code in all_codes if code.startswith(('51', '58', '15'))]
+        return etfs
+
     def get_trade_days(self, start_date: str = None, end_date: str = None, count: int = None) -> list[str]:
         """获取指定范围交易日列表
 
