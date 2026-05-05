@@ -1,0 +1,558 @@
+# -*- coding: utf-8 -*-
+# 小市值综合 v16 = v12 基线 + 极轻量两点（v14/v15 流动性/动量大改已回退）
+#
+# 说明：v14～v15 在部分区间上容易「越改越差」，故 v16 不再叠加新因子层，仅在经你验证过的 v12 上：
+# 1) 主力资金流：由单日改为「最近 2 个交易日净流入求和」再 z-score，减轻单日噪声（失败则退回单日）。
+# 2) 广度止损：阈值由 0.94 微调至 0.945，略减少误触清仓。
+#
+# 其余逻辑与 smallcap/12「小市值综合质量动量低波资金流-v12.py」保持一致（国九、季节、MA10 动态仓、
+# 周三 10:30/10:31、涨停持有、止损止盈、极端 K 过滤等）。
+
+from jqdata import *
+from jqdata import finance
+import numpy as np
+import pandas as pd
+import datetime
+from datetime import timedelta
+
+
+def initialize(context):
+    set_option('avoid_future_data', True)
+    set_benchmark('399101.XSHE')
+    set_option('use_real_price', True)
+    set_slippage(FixedSlippage(3 / 10000))
+    set_order_cost(
+        OrderCost(
+            open_tax=0,
+            close_tax=0.001,
+            open_commission=2.5 / 10000,
+            close_commission=2.5 / 10000,
+            close_today_commission=0,
+            min_commission=5,
+        ),
+        type='stock',
+    )
+    log.set_level('order', 'error')
+    log.set_level('system', 'error')
+    log.set_level('strategy', 'info')
+
+    g.trading_signal = True
+    g.run_stoploss = True
+    g.filter_audit = False
+    g.adjust_num = True
+
+    g.hold_list = []
+    g.yesterday_HL_list = []
+    g.target_list = []
+    g.limitup_stocks = []
+
+    g.pass_periods = [
+        ('01-01', '01-31'),
+        ('04-01', '04-30'),
+        ('12-15', '12-31'),
+    ]
+
+    g.min_mv = 0
+    g.max_mv = 1e10
+    g.stock_num = 4
+    g.candidate_pool = 100
+    g.reason_to_sell = ''
+    g.stoploss_strategy = 3
+    g.stoploss_limit = 0.10
+    g.stoploss_market = 0.945
+    g.lowest = 1.0
+    g.highest = 80.0
+
+    g.use_breadth_stop = True
+    g.mf_weight = 0.35
+    g.mf_sum_days = 2
+    g._last_pass_state = None
+
+    run_daily(prepare_stock_list, '9:05')
+    run_weekly(weekly_sell_task, 3, '10:30')
+    run_weekly(weekly_buy_task, 3, '10:31')
+    run_daily(trade_afternoon, time='14:20', reference_security='399101.XSHE')
+    run_daily(sell_stocks, time='10:00')
+    run_daily(sell_stocks, time='14:00')
+    run_daily(close_account, '14:50')
+
+
+def prepare_stock_list(context):
+    g.hold_list = []
+    g.limitup_stocks = []
+    for position in list(context.portfolio.positions.values()):
+        g.hold_list.append(position.security)
+
+    if g.hold_list:
+        df = get_price(
+            g.hold_list,
+            end_date=context.previous_date,
+            frequency='daily',
+            fields=['close', 'high_limit', 'low_limit'],
+            count=1,
+            panel=False,
+            fill_paused=False,
+        )
+        df = df[df['close'] == df['high_limit']]
+        g.yesterday_HL_list = list(df.code)
+    else:
+        g.yesterday_HL_list = []
+
+    check_pass_period(context)
+
+
+def _date_in_pass_period(d):
+    m, day = d.month, d.day
+    for start_s, end_s in g.pass_periods:
+        sm, sd = int(start_s[:2]), int(start_s[3:5])
+        em, ed = int(end_s[:2]), int(end_s[3:5])
+        if sm != em:
+            continue
+        if m == sm and sd <= day <= ed:
+            return True
+    return False
+
+
+def check_pass_period(context):
+    d = context.current_dt.date()
+    is_pass = _date_in_pass_period(d)
+    g.trading_signal = not is_pass
+    prev = g._last_pass_state
+    if prev is not None and prev != is_pass:
+        if is_pass:
+            log.info('进入空仓避险期: %s' % d)
+        else:
+            log.info('结束空仓避险期，恢复交易: %s' % d)
+    g._last_pass_state = is_pass
+
+
+def adjust_stock_num(context):
+    if not g.adjust_num:
+        return g.stock_num
+    ma_para = 10
+    today = context.previous_date
+    start_date = today - datetime.timedelta(days=ma_para * 3)
+    index_df = get_price(
+        '399101.XSHE', start_date=start_date, end_date=today, frequency='daily'
+    )
+    index_df['ma'] = index_df['close'].rolling(window=ma_para).mean()
+    last_row = index_df.iloc[-1]
+    diff = float(last_row['close'] - last_row['ma'])
+    if diff >= 500:
+        return 3
+    if 200 <= diff < 500:
+        return 3
+    if -200 <= diff < 200:
+        return 4
+    if -500 <= diff < -200:
+        return 5
+    return 6
+
+
+def _safe_z(s):
+    s = pd.to_numeric(s, errors='coerce')
+    if s.notna().sum() < 5:
+        return pd.Series(0.0, index=s.index)
+    mu = s.mean()
+    sig = s.std()
+    if sig == 0 or np.isnan(sig):
+        return pd.Series(0.0, index=s.index)
+    z = (s - mu) / sig
+    return z.fillna(0.0)
+
+
+def _mf_single_day(codes, mf_date):
+    parts = []
+    for i in range(0, len(codes), 400):
+        sub = codes[i : i + 400]
+        df = get_money_flow(
+            security_list=sub,
+            end_date=mf_date,
+            count=1,
+            fields=['sec_code', 'net_amount_main'],
+        )
+        if isinstance(df, pd.DataFrame) and not df.empty:
+            parts.append(df)
+    if not parts:
+        return None
+    mf = pd.concat(parts, ignore_index=True)
+    mf = mf.drop_duplicates(subset=['sec_code'])
+    return mf.set_index('sec_code')['net_amount_main'].reindex(codes).fillna(0.0)
+
+
+def _attach_money_flow_score(codes, context):
+    if not codes:
+        return pd.Series(dtype=float)
+    try:
+        days = get_trade_days(end_date=context.previous_date, count=3)
+        if len(days) < 2:
+            return pd.Series(0.0, index=codes)
+        mf_date = days[-2]
+        nd = max(1, int(getattr(g, 'mf_sum_days', 2)))
+        if nd <= 1:
+            s = _mf_single_day(codes, mf_date)
+            if s is None:
+                return pd.Series(0.0, index=codes)
+            return _safe_z(s)
+        parts = []
+        for i in range(0, len(codes), 400):
+            sub = codes[i : i + 400]
+            df = get_money_flow(
+                security_list=sub,
+                end_date=mf_date,
+                count=nd,
+                fields=['sec_code', 'net_amount_main'],
+            )
+            if isinstance(df, pd.DataFrame) and not df.empty:
+                parts.append(df)
+        if not parts:
+            s = _mf_single_day(codes, mf_date)
+            if s is None:
+                return pd.Series(0.0, index=codes)
+            return _safe_z(s)
+        mf = pd.concat(parts, ignore_index=True)
+        agg = mf.groupby('sec_code')['net_amount_main'].sum()
+        s = agg.reindex(codes).fillna(0.0)
+        if s.abs().sum() < 1e-6:
+            s = _mf_single_day(codes, mf_date)
+            if s is None:
+                return pd.Series(0.0, index=codes)
+        return _safe_z(s)
+    except Exception:
+        try:
+            days = get_trade_days(end_date=context.previous_date, count=3)
+            if len(days) < 2:
+                return pd.Series(0.0, index=codes)
+            s = _mf_single_day(codes, days[-2])
+            if s is None:
+                return pd.Series(0.0, index=codes)
+            return _safe_z(s)
+        except Exception:
+            return pd.Series(0.0, index=codes)
+
+
+def get_stock_list(context):
+    MKT_index = '399101.XSHE'
+    initial_list = filter_stocks(context, get_index_stocks(MKT_index))
+    if not initial_list:
+        return []
+
+    q = query(
+        valuation.code,
+        valuation.market_cap,
+        indicator.roe,
+        income.np_parent_company_owners,
+        income.net_profit,
+        income.operating_revenue,
+    ).filter(
+        valuation.code.in_(initial_list),
+        valuation.market_cap.between(g.min_mv, g.max_mv),
+        income.np_parent_company_owners > 0,
+        income.net_profit > 0,
+        income.operating_revenue > 1e8,
+    ).order_by(valuation.market_cap.asc()).limit(g.candidate_pool)
+
+    df = get_fundamentals(q)
+    if df is None or df.empty:
+        return []
+
+    if g.filter_audit:
+        df = df[df['code'].apply(lambda x: filter_audit(context, x))]
+
+    codes = list(df['code'])
+    if not codes:
+        return []
+
+    px = get_price(
+        codes,
+        end_date=context.previous_date,
+        frequency='daily',
+        fields=['close'],
+        count=25,
+        panel=False,
+        fill_paused=False,
+    )
+    if px is None or px.empty:
+        return codes[: g.stock_num]
+
+    mom = {}
+    vol = {}
+    for c in codes:
+        sub = px[px['code'] == c].sort_values('time')
+        closes = sub['close'].values.astype(float)
+        if len(closes) < 21:
+            mom[c] = 0.0
+            vol[c] = 0.05
+            continue
+        r20 = closes[-2] / max(closes[-22], 1e-9) - 1.0
+        rets = np.diff(closes[-21:]) / np.clip(closes[-21:-1], 1e-9, None)
+        mom[c] = float(r20)
+        vol[c] = float(np.std(rets)) if len(rets) > 1 else 0.05
+
+    d = df.set_index('code')
+    d['mom20'] = pd.Series(mom).reindex(d.index).fillna(0.0)
+    d['vol20'] = pd.Series(vol).reindex(d.index).fillna(0.05)
+    d['roe'] = pd.to_numeric(d['roe'], errors='coerce').fillna(0.0)
+
+    z_roe = _safe_z(d['roe'])
+    z_mom = _safe_z(d['mom20'])
+    z_vol = _safe_z(d['vol20'])
+    z_mf = _attach_money_flow_score(list(d.index), context)
+    z_mf = z_mf.reindex(d.index).fillna(0.0)
+
+    d['score'] = z_roe + z_mom - z_vol + g.mf_weight * z_mf
+    d = d.sort_values(['score', 'market_cap'], ascending=[False, True])
+    ranked = list(d.index)
+
+    last_prices = history(1, unit='1d', field='close', security_list=ranked)
+    out = []
+    for c in ranked:
+        if c in g.hold_list:
+            out.append(c)
+            continue
+        try:
+            p = last_prices[c][-1]
+        except Exception:
+            continue
+        if g.lowest <= p <= g.highest:
+            out.append(c)
+
+    out = filter_recent_extreme_movements(context, out)
+    return out
+
+
+def filter_recent_extreme_movements(context, stock_list):
+    if not stock_list:
+        return []
+    end_date = context.previous_date
+    df = get_price(
+        stock_list,
+        end_date=end_date,
+        frequency='daily',
+        fields=['close', 'high_limit', 'low_limit', 'volume'],
+        count=3,
+        panel=False,
+        fill_paused=False,
+    )
+    exclude = set()
+    for stock in stock_list:
+        sd = df[df['code'] == stock]
+        if len(sd) < 3:
+            exclude.add(stock)
+            continue
+        has_up = (sd['close'] == sd['high_limit']).any()
+        has_dn = (sd['close'] == sd['low_limit']).any()
+        y = sd.iloc[-1]
+        y_not_up = y['close'] != y['high_limit']
+        if (has_up or has_dn) and y_not_up:
+            exclude.add(stock)
+    return [s for s in stock_list if s not in exclude]
+
+
+def weekly_sell_task(context):
+    check_pass_period(context)
+
+    if g.trading_signal:
+        new_num = adjust_stock_num(context)
+        if g.stock_num != new_num:
+            g.stock_num = new_num
+            log.info('持仓数量调整为 %s' % new_num)
+
+        g.target_list = get_stock_list(context)[: g.stock_num]
+        log.info('本周目标: %s' % g.target_list)
+
+        sell_list = [
+            s
+            for s in g.hold_list
+            if s not in g.target_list and s not in g.yesterday_HL_list
+        ]
+        for s in sell_list:
+            pos = context.portfolio.positions.get(s)
+            if pos:
+                close_position(pos)
+    else:
+        g.target_list = []
+        for s in list(g.hold_list):
+            pos = context.portfolio.positions.get(s)
+            if pos:
+                close_position(pos)
+
+
+def weekly_buy_task(context):
+    check_pass_period(context)
+    if not g.trading_signal or not g.target_list:
+        return
+    buy_security(context, g.target_list)
+
+
+def check_limit_up(context):
+    now_time = context.current_dt
+    if not g.yesterday_HL_list:
+        return
+    for stock in g.yesterday_HL_list:
+        pos = context.portfolio.positions.get(stock)
+        if not pos:
+            continue
+        cd = get_price(
+            stock,
+            end_date=now_time,
+            frequency='1m',
+            fields=['close', 'high_limit'],
+            skip_paused=False,
+            fq='pre',
+            count=1,
+            panel=False,
+            fill_paused=True,
+        )
+        if cd is None or cd.empty:
+            continue
+        if cd.iloc[0, 0] < cd.iloc[0, 1]:
+            log.info('涨停打开卖出 %s' % stock)
+            close_position(pos)
+            g.reason_to_sell = 'limitup'
+            g.limitup_stocks.append(stock)
+        else:
+            log.debug('涨停持有 %s' % stock)
+
+
+def check_remain_amount(context):
+    if g.reason_to_sell == 'limitup':
+        g.hold_list = [p.security for p in context.portfolio.positions.values()]
+        if len(g.hold_list) < g.stock_num:
+            n = min(len(g.limitup_stocks), g.stock_num - len(g.hold_list))
+            extra = [s for s in g.target_list if s not in g.limitup_stocks][: max(n, 0)]
+            if extra:
+                buy_security(context, extra)
+        g.reason_to_sell = ''
+    elif g.reason_to_sell == 'stoploss':
+        g.reason_to_sell = ''
+
+
+def trade_afternoon(context):
+    if g.trading_signal:
+        check_limit_up(context)
+        check_remain_amount(context)
+
+
+def sell_stocks(context):
+    if not g.run_stoploss:
+        return
+    positions = context.portfolio.positions
+
+    if g.stoploss_strategy in (1, 3):
+        for stock in list(positions.keys()):
+            pos = positions.get(stock)
+            if not pos:
+                continue
+            price = pos.price
+            avg = pos.avg_cost
+            if price >= avg * 2:
+                order_target_value(stock, 0)
+                log.info('翻倍止盈 %s' % stock)
+            elif price < avg * (1 - g.stoploss_limit):
+                order_target_value(stock, 0)
+                g.reason_to_sell = 'stoploss'
+                log.info('止损 %s' % stock)
+
+    if g.use_breadth_stop and g.stoploss_strategy in (2, 3):
+        try:
+            stock_df = get_price(
+                security=get_index_stocks('399101.XSHE'),
+                end_date=context.previous_date,
+                frequency='daily',
+                fields=['close', 'open'],
+                count=1,
+                panel=False,
+            )
+            ratio = (stock_df['close'] / stock_df['open']).mean()
+            if ratio <= g.stoploss_market:
+                g.reason_to_sell = 'stoploss'
+                log.info('广度止损 平均收盘/开盘=%.4f' % ratio)
+                positions = context.portfolio.positions
+                for stock in list(positions.keys()):
+                    order_target_value(stock, 0)
+        except Exception:
+            pass
+
+
+def close_account(context):
+    check_pass_period(context)
+    if not g.trading_signal and g.hold_list:
+        for stock in list(g.hold_list):
+            pos = context.portfolio.positions.get(stock)
+            if pos:
+                close_position(pos)
+                log.info('空仓期清仓 %s' % stock)
+
+
+def filter_stocks(context, stock_list):
+    current_data = get_current_data()
+    last_prices = history(1, unit='1m', field='close', security_list=stock_list)
+    out = []
+    for stock in stock_list:
+        if current_data[stock].paused:
+            continue
+        if current_data[stock].is_st:
+            continue
+        if '退' in current_data[stock].name:
+            continue
+        if stock.startswith('30') or stock.startswith('68') or stock.startswith('8') or stock.startswith('4'):
+            continue
+        if not (stock in context.portfolio.positions or last_prices[stock][-1] < current_data[stock].high_limit):
+            continue
+        if not (stock in context.portfolio.positions or last_prices[stock][-1] > current_data[stock].low_limit):
+            continue
+        info = get_security_info(stock)
+        if info is None:
+            continue
+        if context.previous_date - info.start_date < timedelta(days=375):
+            continue
+        out.append(stock)
+    return out
+
+
+def filter_audit(context, code):
+    lstd = context.previous_date
+    last_year = (lstd.replace(year=lstd.year - 3, month=1, day=1)).strftime('%Y-%m-%d')
+    q = query(finance.STK_AUDIT_OPINION).filter(
+        finance.STK_AUDIT_OPINION.code == code,
+        finance.STK_AUDIT_OPINION.pub_date >= last_year,
+    )
+    df = finance.run_query(q)
+    if df is None or df.empty:
+        return True
+    df['report_type'] = df['report_type'].astype(str)
+    bad = df['report_type'].str.contains(r'2|3|4|5')
+    return not bad.any()
+
+
+def order_target_value_(security, value):
+    return order_target_value(security, value)
+
+
+def open_position(security, value):
+    o = order_target_value_(security, value)
+    return o is not None and o.filled > 0
+
+
+def close_position(position):
+    security = position.security
+    order = order_target_value_(security, 0)
+    if order is not None:
+        if order.status == OrderStatus.held and order.filled == order.amount:
+            return True
+    return False
+
+
+def buy_security(context, target_list):
+    target_list = [s for s in target_list if s]
+    target_num = len(target_list)
+    if target_num == 0:
+        return
+    stocks_to_buy = [s for s in target_list if s not in context.portfolio.positions]
+    if len(stocks_to_buy) == 0:
+        return
+    value = context.portfolio.cash / len(stocks_to_buy)
+    for stock in stocks_to_buy:
+        if open_position(stock, value):
+            log.info('买入[%s] %.2f 元' % (stock, value))
