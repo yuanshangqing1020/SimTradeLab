@@ -6,7 +6,7 @@
 - 资金规模: 50万（TARGET_CAPITAL 软约束上限）
 - 持仓数量: 10~50只（由 context.MAX_HOLD 控制）
 - 标的: 沪深300+中证500 动态成分股 + 固定 ETF 候选池
-- 网格步长: clip(vol * FACTOR, MIN, MAX)，区间 1%~5%
+- 网格步长: clip(vol * FACTOR, MIN, MAX)，默认区间 1%~4%（优化候选含 5%）
 - 参数: 由 optimization/optimize_params.py Walk-Forward 自动调参
 """
 import numpy as np
@@ -41,6 +41,7 @@ def initialize(context):
 
 
 def handle_data(context, data):
+    # 假定日频回测（handle_data 每交易日调用一次）
     context.day_counter += 1
     if context.day_counter == 1 or context.day_counter % context.REBALANCE_FREQ == 0:
         _refresh_pool(context)
