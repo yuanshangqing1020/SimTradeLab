@@ -73,5 +73,8 @@ GEMINI.md
 .pre-commit-config.yaml
 stats/
 data*/
+backtest_cache/
+optuna_journal.log
+strategies/temp_strategy_*/
 .claude
 *.ipynb
