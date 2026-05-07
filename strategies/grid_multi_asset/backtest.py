@@ -18,7 +18,7 @@ CANDIDATE_ETFS = [
     '512170.SS', '512760.SS', '159792.SZ', '513100.SS', '513050.SS',
 ]
 
-TARGET_CAPITAL = 500_000.0  # 策略目标资金规模（网格分配上限）
+TARGET_CAPITAL = 500000.0  # 策略目标资金规模（网格分配上限）
 
 
 def initialize(context):
