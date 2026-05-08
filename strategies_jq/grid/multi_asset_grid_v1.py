@@ -320,6 +320,7 @@ def _execute_grid(context):
 
     layers = []
     active = []
+    active_prices = []
 
     for code in g.pool:
         if price_df is None or code not in price_df.columns:
@@ -342,6 +343,7 @@ def _execute_grid(context):
         layer = _calc_layer(price, ma20, step, g.GRID_MAX_LAYER)
         layers.append(layer)
         active.append(code)
+        active_prices.append(price)
 
     if not active:
         return
@@ -352,5 +354,10 @@ def _execute_grid(context):
 
     tv  = context.portfolio.total_value
     cap = min(tv, max(TARGET_CAPITAL, 1000.0))
-    for code, w in zip(active, norm_w):
-        order_target_value(code, cap * w)
+    for code, w, price in zip(active, norm_w, active_prices):
+        target_val = cap * w
+        # A 股最小 1 手 = 100 股；目标金额不足 1 手则跳过，避免委托失败
+        if target_val < price * 100:
+            log.debug('跳过 %s: 目标金额 %.0f < 1手金额 %.0f' % (code, target_val, price * 100))
+            continue
+        order_target_value(code, target_val)
