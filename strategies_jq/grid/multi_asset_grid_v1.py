@@ -104,7 +104,7 @@ def trade(context):
     _execute_grid(context)
 
 
-def after_trading_end(context, data):
+def after_trading_end(context):
     held = sum(1 for p in context.portfolio.positions.values() if p.total_amount > 0)
     log.info('日终 | 总资产: %.0f | 网格池: %d只 | 持仓: %d只 | 现金: %.0f' % (
         context.portfolio.total_value,
