@@ -1,7 +1,7 @@
-# strategies/grid_multi_asset/optimization/optimize_params.py
+# strategies/grid_multi_asset_v1/optimization/optimize_params.py
 # -*- coding: utf-8 -*-
 """
-多标的自适应网格策略 - Walk-Forward 参数优化器
+多标的自适应网格策略 v1 - Walk-Forward 参数优化器
 
 参数空间: 4×3×2×2×3×3×3×3 = 3,888 组合
 优化期: 2019-01-01 ~ 2024-12-31（6年，覆盖多轮牛熊）
@@ -9,9 +9,11 @@
 
 运行方式:
     cd /mnt/c/Quant-Workspace/SimTradeLab
-    conda run -n SimTrade python strategies/grid_multi_asset/optimization/optimize_params.py
+    conda run -n SimTrade python strategies/grid_multi_asset_v1/optimization/optimize_params.py
 
 断点续传: 直接重新运行，Optuna 自动从 results/optuna_journal.log 恢复
+策略模板: ../template.py（优化器读取该文件并注入参数）
+直接回测: ../backtest.py（含当前最优参数，可通过 run_backtest.py 直接运行）
 """
 
 from simtradelab.backtest.optimizer_framework import (
@@ -77,4 +79,5 @@ if __name__ == '__main__':
         custom_mapping=custom_mapping,
         resume=True,
         verbose=False,
+        strategy_file='template.py',  # 优化器读取 template.py 作为参数注入模板
     )

@@ -949,6 +949,7 @@ def optimize_strategy(
     resume: bool = True,
     verbose: bool = False,
     _script_path: Optional[str] = None,
+    strategy_file: str = 'backtest.py',
 ):
     """一站式策略参数优化入口函数
 
@@ -993,7 +994,7 @@ def optimize_strategy(
         script_filepath = Path(caller_frame.filename)
 
     # 假设脚本在 strategies/{name}/optimization/optimize_params.py
-    strategy_path = script_filepath.parent.parent / "backtest.py"
+    strategy_path = script_filepath.parent.parent / strategy_file
     if not strategy_path.exists():
         raise FileNotFoundError(
             f"无法自动推断策略路径，期望位置: {strategy_path}\n"

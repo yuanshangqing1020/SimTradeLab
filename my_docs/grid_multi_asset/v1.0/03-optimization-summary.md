@@ -85,7 +85,7 @@ W7    2022-01 ~ 2024-01        2024-01 ~ 2024-07
 
 ```bash
 cd /mnt/c/Quant-Workspace/SimTradeLab
-conda run -n SimTrade python strategies/grid_multi_asset/optimization/optimize_params.py
+conda run -n SimTrade python strategies/grid_multi_asset_v1/optimization/optimize_params.py
 ```
 
 - 支持断点续传，中断后重新运行即可从上次进度继续
@@ -109,7 +109,7 @@ conda run -n SimTrade python src/simtradelab/backtest/run_backtest.py
 python3 - << 'EOF'
 import json
 trials = {}
-with open('strategies/grid_multi_asset/optimization/results/optuna_journal.log') as f:
+with open('strategies/grid_multi_asset_v1/optimization/results/optuna_journal.log') as f:
     for line in f:
         d = json.loads(line)
         if d.get('op_code') == 6 and d.get('state') == 2:
@@ -237,18 +237,17 @@ Holdout 表现明显好于全周期，说明 **2021-2022 熊市是主要拖累**
 
 ```
 strategies/
-├── grid_multi_asset/
-│   ├── backtest.py                          # 开发版（优化器注入参数用）
-│   └── optimization/
-│       ├── optimize_params.py               # 调参入口脚本
-│       ├── optimized_strategy.py            # 调参后自动生成的最优参数策略
-│       └── results/
-│           ├── optuna_journal.log           # 当前优化进度（断点续传）
-│           ├── archive_v1_buggy_etf_only/   # 归档：第一次 buggy 优化结果
-│           └── archive_v1_buggy_cache_hit/  # 归档：第二次缓存命中的无效结果
 └── grid_multi_asset_v1/
-    ├── backtest.py                          # ✅ v1 可直接运行版本（含 Trial 53 最优参数）
-    └── stats/                               # 回测输出（log + png）
+    ├── backtest.py                          # ✅ 直接回测版本（含 Trial 53 最优参数）
+    ├── template.py                          # 优化器模板（基础参数，被 optimizer 读取注入）
+    ├── stats/                               # 回测输出（log + png）
+    └── optimization/
+        ├── optimize_params.py               # 调参入口脚本
+        ├── optimized_strategy.py            # 调参后自动生成的最优参数策略
+        └── results/
+            ├── optuna_journal.log           # 当前优化进度（断点续传）
+            ├── archive_v1_buggy_etf_only/   # 归档：第一次 buggy 优化结果
+            └── archive_v1_buggy_cache_hit/  # 归档：第二次缓存命中的无效结果
 
 tests/unit/
 └── test_grid_multi_asset.py                 # 24 个单元测试（全部通过）
