@@ -25,15 +25,15 @@ def initialize(context):
     set_benchmark('000300.SS')
     set_slippage(slippage=0.00246)
 
-    # ── 可调参数（optimizer 通过 context.* regex 注入）────────────────── #
-    context.MAX_HOLD             = 50# 最多持仓标的数
-    context.GRID_STEP_VOL_FACTOR = 0.6# 步长 = clip(vol * factor, min, max)
-    context.GRID_STEP_MIN        = 0.01# 步长下限 1%
-    context.GRID_STEP_MAX        = 0.05# 步长上限 4%
-    context.GRID_MAX_LAYER       = 3# 最大偏离层数
-    context.LAYER_FRACTION       = 0.08# 每层权重增减幅度 ±12%
-    context.VOL_WEIGHT           = 0.8# 波动率在综合打分中的权重
-    context.REBALANCE_FREQ       = 20# 重新选股间隔（交易日）
+    # ── 可调参数（Walk-Forward 最优值 Trial 53，2026-05-08）────────────── #
+    context.MAX_HOLD             = 10   # 最多持仓标的数
+    context.GRID_STEP_VOL_FACTOR = 0.45 # 步长 = clip(vol * factor, min, max)
+    context.GRID_STEP_MIN        = 0.01 # 步长下限 1%
+    context.GRID_STEP_MAX        = 0.05 # 步长上限 5%
+    context.GRID_MAX_LAYER       = 2    # 最大偏离层数
+    context.LAYER_FRACTION       = 0.08 # 每层权重增减幅度 ±8%
+    context.VOL_WEIGHT           = 0.50 # 波动率在综合打分中的权重
+    context.REBALANCE_FREQ       = 10   # 重新选股间隔（交易日）
 
     # ── 运行时状态 ──────────────────────────────────────────────────────── #
     context.pool        = []  # 当前活跃网格池（股票代码列表）

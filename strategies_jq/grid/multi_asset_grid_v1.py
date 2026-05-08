@@ -3,18 +3,19 @@
 多标的自适应网格策略 v1.0（JoinQuant 版）
 
 移植自 SimTradeLab strategies/grid_multi_asset_best/backtest.py
-Walk-Forward 调参结果（2019-2024）：
-  Holdout 2025-2026：年化 +11.99%，夏普 0.70，最大回撤 -15.21%
+Walk-Forward 调参结果（2019-2024，修复基本面列名 bug 后重新优化）：
+  当前最优：Trial 53，walk-forward combined score = -0.3665
+  （优化仍在运行，此为阶段性最优，后续可能继续改善）
 
 参数说明（已注入最优值，可在 initialize 中手动修改）：
-  MAX_HOLD             = 50    最多持仓标的数
-  GRID_STEP_VOL_FACTOR = 0.60  步长 = clip(vol × factor, min, max)
+  MAX_HOLD             = 10    最多持仓标的数（精选高质量高波动）
+  GRID_STEP_VOL_FACTOR = 0.45  步长 = clip(vol × factor, min, max)
   GRID_STEP_MIN        = 0.01  步长下限 1%
   GRID_STEP_MAX        = 0.05  步长上限 5%
-  GRID_MAX_LAYER       = 3     最大偏离层数
-  LAYER_FRACTION       = 0.08  层间权重增量（保守）
-  VOL_WEIGHT           = 0.80  波动率在综合打分中的权重
-  REBALANCE_FREQ       = 20    换股间隔（交易日，约月频）
+  GRID_MAX_LAYER       = 2     最大偏离层数
+  LAYER_FRACTION       = 0.08  层间权重增量
+  VOL_WEIGHT           = 0.50  波动率在综合打分中的权重
+  REBALANCE_FREQ       = 10    换股间隔（交易日，约双周频）
 
 PTrade → JoinQuant 主要差异：
   代码格式：.SS/.SZ → .XSHG/.XSHE
@@ -79,15 +80,15 @@ def initialize(context):
 
     set_slippage(PriceRelatedSlippage(0.00246))  # 双边滑点 0.246%
 
-    # ── 策略参数（Walk-Forward 最优值）──────────────────────────────────── #
-    g.MAX_HOLD             = 50
-    g.GRID_STEP_VOL_FACTOR = 0.60
+    # ── 策略参数（Walk-Forward 最优值 Trial 53，2026-05-08）──────────────── #
+    g.MAX_HOLD             = 10
+    g.GRID_STEP_VOL_FACTOR = 0.45
     g.GRID_STEP_MIN        = 0.01
     g.GRID_STEP_MAX        = 0.05
-    g.GRID_MAX_LAYER       = 3
+    g.GRID_MAX_LAYER       = 2
     g.LAYER_FRACTION       = 0.08
-    g.VOL_WEIGHT           = 0.80
-    g.REBALANCE_FREQ       = 20
+    g.VOL_WEIGHT           = 0.50
+    g.REBALANCE_FREQ       = 10
 
     # ── 运行时状态 ──────────────────────────────────────────────────────── #
     g.pool        = []
