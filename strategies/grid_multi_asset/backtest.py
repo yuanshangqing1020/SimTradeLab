@@ -103,7 +103,7 @@ def _score_universe(vol_dict, fund_df, etf_codes, vol_weight):
     """综合打分，返回按得分降序排列的 [(code, score), ...]。
 
     vol_dict:   {code: annualized_vol}
-    fund_df:    DataFrame with columns ['code','pe_ratio','market_cap','roe']，可为 None
+    fund_df:    DataFrame with columns ['code','pe_ttm','total_value','roe']，可为 None
     etf_codes:  ETF 代码列表（只用 vol，无基本面）
     vol_weight: 波动率在总分中的权重（0~1）
     """
@@ -126,9 +126,9 @@ def _score_universe(vol_dict, fund_df, etf_codes, vol_weight):
             if code not in vol_dict or code not in fd.index:
                 continue
             row = fd.loc[code]
-            pe   = float(row['pe_ratio'])   if 'pe_ratio'   in fd.columns else None
+            pe   = float(row['pe_ttm'])   if 'pe_ttm'   in fd.columns else None
             roe  = float(row['roe'])        if 'roe'        in fd.columns else 0.0
-            mcap = float(row['market_cap']) if 'market_cap' in fd.columns else None
+            mcap = float(row['total_value']) if 'total_value' in fd.columns else None
             if pe is None or mcap is None:
                 continue
             if not (np.isfinite(pe) and 0 < pe < 120):
@@ -205,13 +205,13 @@ def _refresh_pool(context):
     fund_df = None
     if stocks:
         try:
-            raw = get_fundamentals(stocks, 'valuation', ['pe_ratio', 'market_cap', 'roe'])
+            raw = get_fundamentals(stocks, 'valuation', ['pe_ttm', 'total_value', 'roe'])
             if raw is not None and len(raw) > 0:
                 if 'code' not in raw.columns and raw.index.name == 'code':
                     raw = raw.reset_index()
-                raw = raw.dropna(subset=['pe_ratio', 'market_cap'])
-                raw = raw[(raw['pe_ratio'] > 0) & (raw['pe_ratio'] < 120)]
-                raw = raw[raw['market_cap'] >= 3e9]
+                raw = raw.dropna(subset=['pe_ttm', 'total_value'])
+                raw = raw[(raw['pe_ttm'] > 0) & (raw['pe_ttm'] < 120)]
+                raw = raw[raw['total_value'] >= 3e9]
                 if 'code' in raw.columns:
                     stocks = [s for s in stocks if s in raw['code'].values]
                 fund_df = raw
