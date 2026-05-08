@@ -11,7 +11,7 @@ def save_figure(fig, path, dpi=150, close=True, **kwargs):
     import matplotlib.pyplot as plt
     
     # 设置字体 - 使用系统可用的中文字体
-    plt.rcParams['font.sans-serif'] = ['WenQuanYi Micro Hei', 'WenQuanYi Zen Hei', 'Noto Sans CJK SC']
+    plt.rcParams['font.sans-serif'] = ['WenQuanYi Zen Hei', 'WenQuanYi Micro Hei', 'Microsoft YaHei', 'SimHei', 'DejaVu Sans']
     plt.rcParams['axes.unicode_minus'] = False
     
     fig.text(

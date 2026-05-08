@@ -26,11 +26,11 @@ if __name__ == '__main__':
     # ==================== 回测配置 ====================
 
     # 策略名称
-    strategy_name = '5mv'
+    strategy_name = 'grid_multi_asset_best'
 
     # 回测周期
-    start_date = '2025-01-01'
-    end_date = '2025-10-31'
+    start_date = '2019-01-01'
+    end_date = '2026-04-20'
 
     # ==================== 启动回测 ====================
 
@@ -39,7 +39,7 @@ if __name__ == '__main__':
         strategy_name=strategy_name,
         start_date=start_date,
         end_date=end_date,
-        initial_capital=100000.0
+        initial_capital=500000.0  # 策略设计容量 50 万
     )
 
     # 运行回测
