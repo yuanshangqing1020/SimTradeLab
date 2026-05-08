@@ -77,7 +77,7 @@ def initialize(context):
         min_commission=5,
     ), type='fund')
 
-    set_slippage(PriceRelateSlippage(0.00246))  # 双边滑点 0.246%
+    set_slippage(PriceRelatedSlippage(0.00246))  # 双边滑点 0.246%
 
     # ── 策略参数（Walk-Forward 最优值）──────────────────────────────────── #
     g.MAX_HOLD             = 50
