@@ -17,7 +17,7 @@ grid_multi_asset/
 
 | JQ 版本 | 对应 SimTradeLab 版本 | 参数来源 | 主要变化 | 日期 |
 |---------|----------------------|----------|----------|------|
-| v1 | `strategies/grid_multi_asset_best/` (v1.0) | Walk-Forward Trial 53<br>score=-0.3665（优化进行中） | 初始版本；修复 PTrade→JQ API 映射、最小手数限制 | 2026-05-08 |
+| v1 | `strategies/grid_multi_asset_v1/` | Walk-Forward Trial 53<br>score=-0.3665（优化进行中） | 初始版本；修复 PTrade→JQ API 映射、最小手数限制 | 2026-05-08 |
 
 ## 使用方法
 

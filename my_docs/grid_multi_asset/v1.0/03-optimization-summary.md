@@ -95,7 +95,7 @@ conda run -n SimTrade python strategies/grid_multi_asset/optimization/optimize_p
 
 ```bash
 # 修改 src/simtradelab/backtest/run_backtest.py 中的配置后运行：
-#   strategy_name = 'grid_multi_asset_best'
+#   strategy_name = 'grid_multi_asset_v1'
 #   start_date    = '2019-01-01'
 #   initial_capital = 500000.0
 conda run -n SimTrade python src/simtradelab/backtest/run_backtest.py
@@ -135,23 +135,25 @@ EOF
 | 结果文件 | `results/best_params_20260508_025016.json` |
 | 试验记录 | `results/trials_20260508_025016.csv` |
 
-### 4.2 最优参数（Trial 33）
+### 4.2 最优参数（Trial 53，修复 bug 后第三次优化）
+
+> **注：** 原第一次优化（Trial 33，score=-0.5790）因 `get_fundamentals` 列名 bug（`pe_ratio`/`market_cap` → 应为 `pe_ttm`/`total_value`）导致股票全部被过滤，策略实质退化为纯 ETF 模式，参数无效，已归档至 `results/archive_v1_buggy_etf_only/`。修复 bug 并清除缓存后重新优化，以下为第三次优化的阶段性最优值。
 
 ```python
-context.MAX_HOLD             = 50    # 持 50 只，充分分散
-context.GRID_STEP_VOL_FACTOR = 0.60  # 高波动放大系数
+context.MAX_HOLD             = 10    # 精选 10 只高质量标的，集中持仓
+context.GRID_STEP_VOL_FACTOR = 0.45  # 步长波动率放大系数（适中）
 context.GRID_STEP_MIN        = 0.01  # 步长下限 1%
 context.GRID_STEP_MAX        = 0.05  # 步长上限 5%
-context.GRID_MAX_LAYER       = 3     # 最多 3 层加仓
+context.GRID_MAX_LAYER       = 2     # 最多 2 层加仓（控制极端仓位）
 context.LAYER_FRACTION       = 0.08  # 最小层间权重（保守加仓）
-context.VOL_WEIGHT           = 0.80  # 波动率占标的评分 80%
-context.REBALANCE_FREQ       = 20    # 月频换股（20 交易日）
+context.VOL_WEIGHT           = 0.50  # 波动率与基本面各占 50%（均衡选股）
+context.REBALANCE_FREQ       = 10    # 双周频换股（10 交易日）
 ```
 
 **参数规律解读：**
-- 宽步长（1%~5%）+ 少层（3层）+ 小加仓（0.08）→ 熊市少逆势加仓，控制回撤
-- 高波动率权重（0.80）→ 优先选择振幅大、适合网格的标的
-- 月频换股 → 降低换手率和摩擦成本
+- `MAX_HOLD=10` → 在正确的股票+ETF混合候选池中，集中持仓头部标的
+- `VOL_WEIGHT=0.50` → 修复 bug 后，基本面质量与波动率同等重要
+- `REBALANCE_FREQ=10` → 双周换股，捕捉短周期轮动机会
 
 ### 4.3 优化期得分
 
@@ -236,18 +238,25 @@ Holdout 表现明显好于全周期，说明 **2021-2022 熊市是主要拖累**
 ```
 strategies/
 ├── grid_multi_asset/
-│   ├── backtest.py                          # 原始策略（默认参数）
+│   ├── backtest.py                          # 开发版（优化器注入参数用）
 │   └── optimization/
 │       ├── optimize_params.py               # 调参入口脚本
 │       ├── optimized_strategy.py            # 调参后自动生成的最优参数策略
 │       └── results/
-│           ├── best_params_20260508_025016.json  # 最优参数 JSON
-│           └── trials_20260508_025016.csv        # 全部 trial 记录
-└── grid_multi_asset_best/
-    └── backtest.py                          # ✅ v1.0 可直接运行版本
+│           ├── optuna_journal.log           # 当前优化进度（断点续传）
+│           ├── archive_v1_buggy_etf_only/   # 归档：第一次 buggy 优化结果
+│           └── archive_v1_buggy_cache_hit/  # 归档：第二次缓存命中的无效结果
+└── grid_multi_asset_v1/
+    ├── backtest.py                          # ✅ v1 可直接运行版本（含 Trial 53 最优参数）
+    └── stats/                               # 回测输出（log + png）
 
 tests/unit/
 └── test_grid_multi_asset.py                 # 24 个单元测试（全部通过）
+
+strategies_jq/grid_multi_asset/
+├── README.md                                # JQ 版版本对照表
+└── v1/
+    └── strategy.py                          # ✅ 聚宽平台版（直接粘贴运行）
 
 my_docs/grid_multi_asset/
 ├── v1.0/

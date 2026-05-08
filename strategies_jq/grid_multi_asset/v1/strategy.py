@@ -2,7 +2,7 @@
 """
 多标的自适应网格策略 v1.0（JoinQuant 版）
 
-移植自 SimTradeLab strategies/grid_multi_asset_best/backtest.py
+移植自 SimTradeLab strategies/grid_multi_asset_v1/backtest.py
 Walk-Forward 调参结果（2019-2024，修复基本面列名 bug 后重新优化）：
   当前最优：Trial 53，walk-forward combined score = -0.3665
   （优化仍在运行，此为阶段性最优，后续可能继续改善）

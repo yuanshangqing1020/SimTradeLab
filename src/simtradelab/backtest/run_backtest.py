@@ -26,7 +26,7 @@ if __name__ == '__main__':
     # ==================== 回测配置 ====================
 
     # 策略名称
-    strategy_name = 'grid_multi_asset_best'
+    strategy_name = 'grid_multi_asset_v1'
 
     # 回测周期
     start_date = '2019-01-01'
