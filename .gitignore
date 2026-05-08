@@ -79,5 +79,8 @@ strategies/temp_strategy_*/
 # 保留 results/ 下的 json/csv（优化结果），只排除大体积缓存
 !strategies/**/optimization/results/*.json
 !strategies/**/optimization/results/*.csv
+!strategies/**/optimization/results/archive_*/*.json
+!strategies/**/optimization/results/archive_*/*.csv
+!strategies/**/optimization/results/archive_*/README.md
 .claude
 *.ipynb
