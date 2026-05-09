@@ -14,7 +14,7 @@ import pytest
 from pathlib import Path
 
 # ── 加载策略纯函数 ──────────────────────────────────────────────────────────── #
-_STRATEGY_PATH = Path(__file__).parents[2] / 'strategies' / 'grid_multi_asset' / 'backtest.py'
+_STRATEGY_PATH = Path(__file__).parents[2] / 'strategies' / 'grid_multi_asset_v1' / 'backtest.py'
 
 def _load_fns():
     """用 mock PTrade 全局量执行策略文件，返回其命名空间。"""
