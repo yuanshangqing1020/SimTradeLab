@@ -91,4 +91,5 @@ if __name__ == '__main__':
         resume=True,
         verbose=False,
         strategy_file='template.py',
+        patience=500,                    # 显式自定义
     )

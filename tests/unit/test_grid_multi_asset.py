@@ -158,8 +158,8 @@ class TestScoreUniverse:
         vol = {'A': 0.3, 'B': 0.4}
         fd = pd.DataFrame({
             'code': ['A', 'B'],
-            'pe_ratio': [-5.0, 20.0],
-            'market_cap': [5e10, 5e10],
+            'pe_ttm': [-5.0, 20.0],
+            'total_value': [5e10, 5e10],
             'roe': [0.1, 0.15],
         })
         result = _score(vol, fd, [], vol_weight=0.6)
@@ -171,8 +171,8 @@ class TestScoreUniverse:
         vol = {'A': 0.3, 'B': 0.4}
         fd = pd.DataFrame({
             'code': ['A', 'B'],
-            'pe_ratio': [20.0, 20.0],
-            'market_cap': [1e9, 5e10],   # A < 30亿门槛
+            'pe_ttm': [20.0, 20.0],
+            'total_value': [1e9, 5e10],   # A < 30亿门槛
             'roe': [0.1, 0.15],
         })
         result = _score(vol, fd, [], vol_weight=0.6)
@@ -188,8 +188,8 @@ class TestScoreUniverse:
         vol = {'S1': 0.3, 'ETF1': 0.6}
         fd = pd.DataFrame({
             'code': ['S1'],
-            'pe_ratio': [20.0],
-            'market_cap': [5e10],
+            'pe_ttm': [20.0],
+            'total_value': [5e10],
             'roe': [0.15],
         })
         result = _score(vol, fd, ['ETF1'], vol_weight=0.9)
