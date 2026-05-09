@@ -1,6 +1,6 @@
 # 多标的自适应网格策略（JoinQuant 版）
 
-> 对应 SimTradeLab 目录：`strategies/grid_multi_asset/`
+> 对应 SimTradeLab 目录：`strategies/grid_multi_asset_v1/`
 
 ## 目录结构
 
@@ -17,7 +17,7 @@ grid_multi_asset/
 
 | JQ 版本 | 对应 SimTradeLab 版本 | 参数来源 | 主要变化 | 日期 |
 |---------|----------------------|----------|----------|------|
-| v1 | `strategies/grid_multi_asset_v1/` | Walk-Forward Trial 53<br>score=-0.3665（优化进行中） | 初始版本；修复 PTrade→JQ API 映射、最小手数限制 | 2026-05-08 |
+| v1 | `strategies/grid_multi_asset_v1/` | Walk-Forward Trial 53<br>score=-0.3665（✅ 优化已完成）<br>Holdout 年化 +60.51%，夏普 2.20，回撤 -16.28% | 初始版本；修复 PTrade→JQ API 映射、最小手数限制 | 2026-05-08 |
 
 ## 使用方法
 

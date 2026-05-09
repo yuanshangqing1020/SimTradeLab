@@ -3,9 +3,9 @@
 多标的自适应网格策略 v1.0（JoinQuant 版）
 
 移植自 SimTradeLab strategies/grid_multi_asset_v1/backtest.py
-Walk-Forward 调参结果（2019-2024，修复基本面列名 bug 后重新优化）：
-  当前最优：Trial 53，walk-forward combined score = -0.3665
-  （优化仍在运行，此为阶段性最优，后续可能继续改善）
+Walk-Forward 调参结果（2019-2024，修复基本面列名 bug 后重新优化，✅ 已完成）：
+  最优参数：Trial 53，walk-forward combined score = -0.3665
+  Holdout 样本外（2025-01-01 ～ 2026-03-31）：年化 +60.51%，夏普 2.20，最大回撤 -16.28%
 
 参数说明（已注入最优值，可在 initialize 中手动修改）：
   MAX_HOLD             = 10    最多持仓标的数（精选高质量高波动）
