@@ -72,6 +72,7 @@ CLAUDE.md
 GEMINI.md
 .pre-commit-config.yaml
 stats/
+!strategies/**/stats/.gitkeep
 data*/
 backtest_cache/
 optuna_journal.log
