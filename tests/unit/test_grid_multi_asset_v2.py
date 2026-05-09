@@ -8,7 +8,6 @@ v2 新增功能单元测试：
 import types
 import numpy as np
 import pandas as pd
-import pytest
 from pathlib import Path
 
 # ── 加载策略纯函数 ──────────────────────────────────────────────────────────── #
@@ -41,7 +40,6 @@ def _load_fns():
 _fns         = _load_fns()
 _calc_regime = _fns['_calc_regime']
 _apply_cap   = _fns['_apply_weight_cap']
-_normalize   = _fns['_normalize_weights']
 
 
 # ── _calc_regime ────────────────────────────────────────────────────────────── #
