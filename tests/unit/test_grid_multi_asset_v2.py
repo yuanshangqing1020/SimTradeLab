@@ -82,10 +82,10 @@ class TestCalcRegime:
 # ── _apply_weight_cap ───────────────────────────────────────────────────────── #
 class TestApplyWeightCap:
     def test_no_overflow_after_cap(self):
-        # 4只标的，等权 0.25，cap 设为 0.20
-        raw = [0.25, 0.25, 0.25, 0.25]
-        result = _apply_cap(raw, max_w=0.20)
-        assert all(w <= 0.20 + 1e-9 for w in result), f"weight overflow: {result}"
+        # 1只标的超额（0.40 > 0.30），其余3只均衡，N*cap=1.20>1.0可满足约束
+        raw = [0.40, 0.20, 0.20, 0.20]
+        result = _apply_cap(raw, max_w=0.30)
+        assert all(w <= 0.30 + 1e-9 for w in result), f"weight overflow: {result}"
 
     def test_sum_equals_one_after_cap(self):
         raw = [0.40, 0.30, 0.20, 0.10]
