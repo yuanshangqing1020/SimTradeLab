@@ -102,7 +102,7 @@
 
 - **时间轴、Holdout、WF 窗口** 与 v2 [03-optimization-summary.md](../v2.0/03-optimization-summary.md) **对齐**。
 - **参数空间：** v2 已有维度 + 第四节 + 第五节离散维；`optimize_params.py` 中延续无效组合拒绝（如步长边界）。
-- **工程：** 早停、剪枝、journal 断点续传对齐 v2；维度增加后可调整 `patience` 等，见 `02-plan.md`。
+- **工程：** 早停、剪枝、journal 断点续传对齐 v2；维度增加后可调整 `patience`、缩小冒烟子空间或分阶段 WF，详见 [02-plan.md](./02-plan.md)。
 - **报告：** 除 Holdout、全长外，须含 **2021-01～2022-12**（或与代码锁定的一致熊市窗）专项表。
 
 ---
@@ -113,10 +113,10 @@
 - **回归：** v3 独立路径，不得改写 v2 行为。
 - **本目录文档：**  
   - `01-design.md` — 本文件  
-  - `02-plan.md` — 实施计划（待编写）  
+  - `02-plan.md` — 实施计划：[02-plan.md](./02-plan.md)  
   - `03-optimization-summary.md` — 调参与回测总结（优化完成后编写）  
 
-实施计划若以 superpowers 工作流书写，可复制摘要或链接至此目录，避免与 v1/v2 文档树分裂。
+主实施任务分解以 `02-plan.md` 为准，与 v1/v2 同级目录约定一致。
 
 ---
 
