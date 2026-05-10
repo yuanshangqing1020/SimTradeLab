@@ -1,25 +1,46 @@
-# grid_multi_asset v2.0 — 规划中
+# grid_multi_asset v2.0
 
-> 本目录预留给 v2.0 开发文档，文档产出后放置于此。
+多标的自适应网格 **v2**：在 v1 基础上增加大盘 regime（MA120 / MA250）与三档总仓位比例（BULL / NEUTRAL / BEAR），以及单标的权重 water-filling 上限。
 
-## v1.0 结果（最终版）
+## 文档索引
 
-- Holdout 2025-2026：年化 **+60.51%**，夏普 **2.20**，最大回撤 **-16.28%**
-- Walk-Forward 测试期综合得分：-0.3665（含 2021-2022 熊市段）
-- 最优参数：MAX_HOLD=10，VOL_WEIGHT=0.50，REBALANCE_FREQ=10
+| 文件 | 内容 |
+|------|------|
+| [01-design.md](./01-design.md) | 设计说明与测试清单 |
+| [02-plan.md](./02-plan.md) | 任务分解与实施顺序 |
+| [03-optimization-summary.md](./03-optimization-summary.md) | **Walk-Front + Holdout 调参结论（已完成）** |
 
-## 待解决的 v1.0 局限
+## v2 Walk-Front 最优（Trial 29）
 
-1. **熊市表现弱**：Walk-Forward 测试期得分低（含2021-2022熊市），缺少趋势过滤，持续下行时不断补仓加重亏损
-2. **样本外依赖牛市行情**：Holdout 期间（2025）A 股处于结构性牛市，年化 60% 未必可持续，需关注熊市边界
+结果文件：`strategies/grid_multi_asset_v2/optimization/results/best_params_20260510_011341.json`  
+代码已写入：`backtest.py`、`template.py`（及生成的 `optimization/optimized_strategy.py`）。
 
-## 计划改进方向
+| 摘要 | 数值 |
+|------|------|
+| WF 最终综合得分 | **-0.3457** |
+| Holdout 综合得分（未参与优化） | **0.9019** |
+| Holdout 年化 / 夏普 / 最大回撤 | **+28.94%** / **1.43** / **-12.35%** |
 
-- 加入大盘趋势判断（MA120/MA250），下行趋势时减仓或停止网格补仓
-- 对 2021-2022 熊市区间单独回测，量化策略失效边界
-- 在 MAX_HOLD=5~15 区间加密候选值做第二轮精细调参
+## 对照 v1 Holdout（同区间 2025-01～2026-03）
 
-## 参考文档
+v1（Trial 53）在同段 Holdout 上收益更高（约年化 +60%），但回撤与市场 Beta 更大；v2 **回撤与 Beta 更小**，更接近「risk-off 结构」。详见 [03-optimization-summary.md](./03-optimization-summary.md) §六。
 
-- v1.0 总结报告：[`../v1.0/03-optimization-summary.md`](../v1.0/03-optimization-summary.md)
-- v2.0 改进方向详见总结报告第九节
+## 运行（conda 环境 `SimTrade`）
+
+```bash
+cd /mnt/c/QMTReal/SimTrade/SimTradeLab
+
+# Holdout（默认已与优化脚本对齐）
+/root/miniconda3/envs/SimTrade/bin/python src/simtradelab/backtest/run_backtest.py
+
+# 继续或重跑 WF 优化（断点续传）
+/root/miniconda3/envs/SimTrade/bin/python strategies/grid_multi_asset_v2/optimization/optimize_params.py
+
+# v2 单元测试
+/root/miniconda3/envs/SimTrade/bin/python -m pytest tests/unit/test_grid_multi_asset_v2.py -q
+```
+
+## 后续工作（简述）
+
+- **JoinQuant：** 更新对照表状态见 `strategies_jq/grid_multi_asset/README.md`，`v2/strategy.py` 仍待从 `template.py` 映射粘贴。
+- **研究：** 熊市专用区间截面、模拟盘、`run_backtest.py` 全样本长周期冒烟。

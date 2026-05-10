@@ -10,7 +10,7 @@
 留存期: 2025-01-01 ~ 2026-03-31（与 v1 相同口径，便于直接对比）
 
 运行方式:
-    cd /mnt/c/Quant-Workspace/SimTradeLab
+    cd /mnt/c/QMTReal/SimTrade/SimTradeLab   # 或你的 SimTradeLab 根目录
     conda run -n SimTrade python strategies/grid_multi_asset_v2/optimization/optimize_params.py
 
 断点续传: 直接重新运行，Optuna 从 results/optuna_journal.log 恢复

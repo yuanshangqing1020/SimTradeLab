@@ -25,12 +25,12 @@ from simtradelab.backtest.config import BacktestConfig
 if __name__ == '__main__':
     # ==================== 回测配置 ====================
 
-    # 策略名称
-    strategy_name = 'grid_multi_asset_v1'
+    # 策略名称（v2 WF 最优参数已写入 strategies/grid_multi_asset_v2/backtest.py）
+    strategy_name = 'grid_multi_asset_v2'
 
-    # 回测周期
+    # 回测周期：与优化脚本 holdout_period 对齐，便于复现留存期口径
     start_date = '2019-01-01'
-    end_date = '2026-04-20'
+    end_date = '2026-03-31'
 
     # ==================== 启动回测 ====================
 

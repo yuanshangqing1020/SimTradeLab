@@ -3,9 +3,9 @@
 """
 多标的自适应网格策略 v2 — 直接回测版
 
-参数：Walk-Forward 调参最优值（调参完成前使用合理默认值）
-初始资金：50 万
-回测区间：2019-01-01 ~ 今日
+参数：Walk-Forward 最优值（Trial 29，参见 optimization/results/best_params_20260510_011341.json）
+初始资金：50 万。
+留存期复核：`src/simtradelab/backtest/run_backtest.py` 中已将 `strategy_name` 设为 `grid_multi_asset_v2` 且区间与优化脚本 holdout 对齐（2025-01-01 ~ 2026-03-31）。
 """
 import numpy as np
 
@@ -25,18 +25,18 @@ def initialize(context):
 
     # ── 沿用 v1 参数（optimizer 通过 context.* regex 注入）────────────────── #
     context.MAX_HOLD             = 10    # 最多持仓标的数
-    context.GRID_STEP_VOL_FACTOR = 0.45  # 步长 = clip(vol * factor, min, max)
-    context.GRID_STEP_MIN        = 0.01  # 步长下限
-    context.GRID_STEP_MAX        = 0.05  # 步长上限
+    context.GRID_STEP_VOL_FACTOR = 0.60  # 步长 = clip(vol * factor, min, max)
+    context.GRID_STEP_MIN        = 0.02  # 步长下限
+    context.GRID_STEP_MAX        = 0.03  # 步长上限
     context.GRID_MAX_LAYER       = 2     # 最大偏离层数
     context.LAYER_FRACTION       = 0.08  # 每层权重增减幅度
     context.VOL_WEIGHT           = 0.50  # 波动率在综合打分中的权重
-    context.REBALANCE_FREQ       = 10    # 重新选股间隔（交易日）
+    context.REBALANCE_FREQ       = 20    # 重新选股间隔（交易日）
 
     # ── v2 新增参数 ──────────────────────────────────────────────────────── #
-    context.BULL_RATIO    = 0.80  # 牛市总投入比例
+    context.BULL_RATIO    = 0.70  # 牛市总投入比例
     context.NEUTRAL_RATIO = 0.60  # 震荡总投入比例
-    context.BEAR_RATIO    = 0.35  # 熊市总投入比例
+    context.BEAR_RATIO    = 0.25  # 熊市总投入比例
 
     # ── 运行时状态 ──────────────────────────────────────────────────────── #
     context.pool           = []         # 当前活跃网格池
