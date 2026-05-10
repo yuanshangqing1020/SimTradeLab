@@ -1,6 +1,6 @@
 # 多标的自适应网格策略（JoinQuant 版）
 
-> 对应 SimTradeLab 目录：`strategies/grid_multi_asset_v1/`
+> 对应 SimTradeLab：`strategies/grid_multi_asset_v1/`、`strategies/grid_multi_asset_v2/`
 
 ## 目录结构
 
@@ -9,8 +9,8 @@ grid_multi_asset/
 ├── README.md       ← 本文件：版本对照表
 ├── v1/
 │   └── strategy.py ← v1 JoinQuant 代码（直接粘贴到聚宽平台）
-└── v2/             ← 待移植（调参完成后）
-    └── strategy.py
+└── v2/
+    └── strategy.py ← v2 JoinQuant 代码（与 Trial 29 一致，直接粘贴运行）
 ```
 
 ## 版本对照表
@@ -18,7 +18,7 @@ grid_multi_asset/
 | JQ 版本 | 对应 SimTradeLab 版本 | 参数来源 | 主要变化 | 日期 |
 |---------|----------------------|----------|----------|------|
 | v1 | `strategies/grid_multi_asset_v1/` | Walk-Forward Trial 53<br>score=-0.3665（✅ 优化已完成）<br>Holdout 年化 +60.51%，夏普 2.20，回撤 -16.28% | 初始版本；修复 PTrade→JQ API 映射、最小手数限制 | 2026-05-08 |
-| v2 | `strategies/grid_multi_asset_v2/` | Walk-Forward 调参（待完成）| 新增大盘趋势过滤（BULL/NEUTRAL/BEAR）+ 单标的权重上限（water-filling）+ 三档仓位比例 | 2026-05-09 |
+| v2 | `strategies/grid_multi_asset_v2/` | Walk-Forward **已完成**（Trial **29**）<br>Holdout：**年化 +28.94%**，夏普 **1.43**，回撤 **-12.35%**（2025-01～2026-03） | 大盘 regime（MA120/250）+ water-filling + 三档总仓；JQ 见 **`v2/strategy.py`** | 2026-05-10 |
 
 ## 使用方法
 
