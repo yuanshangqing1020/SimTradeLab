@@ -85,3 +85,4 @@ strategies/temp_strategy_*/
 !strategies/**/optimization/results/archive_*/README.md
 .claude
 *.ipynb
+.codex
