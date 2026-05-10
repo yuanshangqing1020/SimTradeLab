@@ -38,23 +38,23 @@ def initialize(context):
     set_slippage(slippage=0.00246)
 
     # ── WF 最优基线（Trial 357，见 results/best_params_20260510_232314.json）── #
-    context.MAX_HOLD             = 12    # 最多持仓标的数
-    context.GRID_STEP_VOL_FACTOR = 0.45  # 步长 = clip(vol * factor, min, max)
-    context.GRID_STEP_MIN        = 0.01  # 步长下限
-    context.GRID_STEP_MAX        = 0.05  # 步长上限
-    context.GRID_MAX_LAYER       = 2     # 最大偏离层数
-    context.LAYER_FRACTION       = 0.08  # 每层权重增减幅度
-    context.VOL_WEIGHT           = 0.65  # 波动率在综合打分中的权重
-    context.REBALANCE_FREQ       = 10    # 重新选股间隔（交易日）
+    context.MAX_HOLD             = 12# 最多持仓标的数
+    context.GRID_STEP_VOL_FACTOR = 0.45# 步长 = clip(vol * factor, min, max)
+    context.GRID_STEP_MIN        = 0.01# 步长下限
+    context.GRID_STEP_MAX        = 0.05# 步长上限
+    context.GRID_MAX_LAYER       = 2# 最大偏离层数
+    context.LAYER_FRACTION       = 0.08# 每层权重增减幅度
+    context.VOL_WEIGHT           = 0.65# 波动率在综合打分中的权重
+    context.REBALANCE_FREQ       = 10# 重新选股间隔（交易日）
 
     # ── v2 新增参数 ──────────────────────────────────────────────────────── #
-    context.BULL_RATIO    = 0.70  # 牛市总投入比例
-    context.NEUTRAL_RATIO = 0.50  # 震荡总投入比例
-    context.BEAR_RATIO    = 0.45  # 熊市总投入比例
+    context.BULL_RATIO    = 0.7# 牛市总投入比例
+    context.NEUTRAL_RATIO = 0.5# 震荡总投入比例
+    context.BEAR_RATIO    = 0.45# 熊市总投入比例
 
     # ── v3 新增（optimizer 可调） ─────────────────────────────────────── #
-    context.BEAR_UNIVERSE_MODE      = 'SAME'       # SAME | ETF_DEFENSIVE
-    context.BEAR_GRID_MODE          = 'CAP_LAYER'  # NORMAL | NO_NET_ADD | CAP_LAYER
+    context.BEAR_UNIVERSE_MODE      = 'SAME'# SAME | ETF_DEFENSIVE
+    context.BEAR_GRID_MODE          = 'CAP_LAYER'# NORMAL | NO_NET_ADD | CAP_LAYER
     context.BEAR_GRID_MAX_LAYER_CAP = 0
 
     # ── 运行时状态 ──────────────────────────────────────────────────────── #

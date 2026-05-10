@@ -18,7 +18,7 @@
 |---|---|---|---|
 | **v1.0** | ✅ 已完成 | Holdout 年化 +60.51%，夏普 2.20，最大回撤 -16.28%；全长见 `03-optimization-summary` §5 | [查看 →](grid_multi_asset/v1.0/) |
 | **v2.0** | ✅ WF/Holdout 已完成 | Trial 29；与 v1 相同 Holdout 区间：**+28.94%** 年化 / 夏普 **1.43** / 回撤 **-12.35%**（risk-off 结构，收益低于 v1 同段但回撤更紧） | [索引 →](grid_multi_asset/v2.0/README.md) · [报告 →](grid_multi_asset/v2.0/) |
-| **v3.0** | 🔧 代码已落地，WF 待跑 | M1+M2 已接入 `grid_multi_asset_v3`；默认 `SAME`/`NORMAL` 与 v2 行为一致 | [设计 →](grid_multi_asset/v3.0/01-design.md) · [计划 →](grid_multi_asset/v3.0/02-plan.md) |
+| **v3.0** | ✅ WF 已完成 | Trial **357**；Holdout 年化约 **+45.5%**（详 §5）；全长跑赢指数仍弱——见 [报告 §5](grid_multi_asset/v3.0/03-optimization-summary.md) | [设计 →](grid_multi_asset/v3.0/01-design.md) · [总结 →](grid_multi_asset/v3.0/03-optimization-summary.md) |
 
 **代码对照：** v1 → `strategies/grid_multi_asset/`；v2 → `strategies/grid_multi_asset_v2/`（沪深300 regime 三档总仓 + 单标的水注权重上限）；v3（规划）→ `strategies/grid_multi_asset_v3/`。
 

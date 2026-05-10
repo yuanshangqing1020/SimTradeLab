@@ -1,13 +1,10 @@
-# strategies/grid_multi_asset_v3/template.py
+# strategies/grid_multi_asset_v3/backtest.py
 # -*- coding: utf-8 -*-
 """
-多标的自适应网格策略 v3
+多标的自适应网格策略 v3 — 直接回测版
 
-继承 v2，并增加：
-  5. 【M2】BEAR + ETF_DEFENSIVE：候选池收窄为 DEFENSIVE_ETF_POOL（仅多头 ETF）
-  6. 【M1】BEAR 下的 GRID_MODE：NORMAL / NO_NET_ADD / CAP_LAYER
-
-参数：由 optimization/optimize_params.py Walk-Forward 自动调参
+参数：**Walk-Forward 最优 Trial 357** · `optimization/results/best_params_20260510_232314.json` · `optimization/optimized_strategy.py`  
+初始资金 50 万；入口：`run_backtest.py` · `strategy_name='grid_multi_asset_v3'`。
 """
 import numpy as np
 
@@ -37,25 +34,25 @@ def initialize(context):
     set_benchmark('000300.SS')
     set_slippage(slippage=0.00246)
 
-    # ── 沿用 v1 参数（optimizer 通过 context.* regex 注入）────────────────── #
-    context.MAX_HOLD             = 10    # 最多持仓标的数
-    context.GRID_STEP_VOL_FACTOR = 0.60  # 步长 = clip(vol * factor, min, max)
-    context.GRID_STEP_MIN        = 0.02  # 步长下限
-    context.GRID_STEP_MAX        = 0.03  # 步长上限
+    # ── WF 最优基线（Trial 357，见 results/best_params_20260510_232314.json）── #
+    context.MAX_HOLD             = 12    # 最多持仓标的数
+    context.GRID_STEP_VOL_FACTOR = 0.45  # 步长 = clip(vol * factor, min, max)
+    context.GRID_STEP_MIN        = 0.01  # 步长下限
+    context.GRID_STEP_MAX        = 0.05  # 步长上限
     context.GRID_MAX_LAYER       = 2     # 最大偏离层数
     context.LAYER_FRACTION       = 0.08  # 每层权重增减幅度
-    context.VOL_WEIGHT           = 0.50  # 波动率在综合打分中的权重
-    context.REBALANCE_FREQ       = 20    # 重新选股间隔（交易日）
+    context.VOL_WEIGHT           = 0.65  # 波动率在综合打分中的权重
+    context.REBALANCE_FREQ       = 10    # 重新选股间隔（交易日）
 
     # ── v2 新增参数 ──────────────────────────────────────────────────────── #
     context.BULL_RATIO    = 0.70  # 牛市总投入比例
-    context.NEUTRAL_RATIO = 0.60  # 震荡总投入比例
-    context.BEAR_RATIO    = 0.25  # 熊市总投入比例
+    context.NEUTRAL_RATIO = 0.50  # 震荡总投入比例
+    context.BEAR_RATIO    = 0.45  # 熊市总投入比例
 
     # ── v3 新增（optimizer 可调） ─────────────────────────────────────── #
-    context.BEAR_UNIVERSE_MODE      = 'SAME'    # SAME | ETF_DEFENSIVE
-    context.BEAR_GRID_MODE          = 'NORMAL' # NORMAL | NO_NET_ADD | CAP_LAYER
-    context.BEAR_GRID_MAX_LAYER_CAP = 1
+    context.BEAR_UNIVERSE_MODE      = 'SAME'       # SAME | ETF_DEFENSIVE
+    context.BEAR_GRID_MODE          = 'CAP_LAYER'  # NORMAL | NO_NET_ADD | CAP_LAYER
+    context.BEAR_GRID_MAX_LAYER_CAP = 0
 
     # ── 运行时状态 ──────────────────────────────────────────────────────── #
     context.pool           = []         # 当前活跃网格池

@@ -114,7 +114,7 @@
 - **本目录文档：**  
   - `01-design.md` — 本文件  
   - `02-plan.md` — 实施计划：[02-plan.md](./02-plan.md)  
-  - `03-optimization-summary.md` — 调参与回测总结（优化完成后编写）  
+  - `03-optimization-summary.md` — 调参与回测总结（**WF 与分段回测已完成**，见该文件 §五）  
 
 主实施任务分解以 `02-plan.md` 为准，与 v1/v2 同级目录约定一致。
 
