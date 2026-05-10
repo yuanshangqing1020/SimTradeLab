@@ -28,9 +28,10 @@ if __name__ == '__main__':
     # 策略名称（v2 WF 最优参数已写入 strategies/grid_multi_asset_v2/backtest.py）
     strategy_name = 'grid_multi_asset_v2'
 
-    # 回测周期：与优化脚本 holdout_period 对齐，便于复现留存期口径
+    # 回测周期：当前为 v2 全长口径（与 my_docs v1/v2 总结 §5.2 截止日期一致，便于与 v1 横比）
+    # 复现 Holdout 时请改为 end_date='2026-03-31'（与 optimize_params holdout_period 一致）
     start_date = '2019-01-01'
-    end_date = '2026-03-31'
+    end_date = '2026-04-20'
 
     # ==================== 启动回测 ====================
 

@@ -20,17 +20,18 @@
 | WF 最终综合得分 | **-0.3457** |
 | Holdout 综合得分（未参与优化） | **0.9019** |
 | Holdout 年化 / 夏普 / 最大回撤 | **+28.94%** / **1.43** / **-12.35%** |
+| 全长（2019-01～2026-04-20，与 v1 同截止）年化 / 夏普 / 最大回撤 / 超额(300) | **+6.01%** / **0.449** / **-39.83%** / **-9.57%** |
 
 ## 对照 v1 Holdout（同区间 2025-01～2026-03）
 
-v1（Trial 53）在同段 Holdout 上收益更高（约年化 +60%），但回撤与市场 Beta 更大；v2 **回撤与 Beta 更小**，更接近「risk-off 结构」。详见 [03-optimization-summary.md](./03-optimization-summary.md) §六。
+v1（Trial 53）在同段 Holdout 上收益更高（约年化 +60%），但回撤与市场 Beta 更大；v2 **回撤与 Beta 更小**，更接近「risk-off 结构」。详见 [03-optimization-summary.md](./03-optimization-summary.md) §五。
 
 ## 运行（conda 环境 `SimTrade`）
 
 ```bash
 cd /mnt/c/QMTReal/SimTrade/SimTradeLab
 
-# Holdout（默认已与优化脚本对齐）
+# 本地回测（`run_backtest.py`：`end_date` 与 v1 全长横比时常用 2026-04-20）
 /root/miniconda3/envs/SimTrade/bin/python src/simtradelab/backtest/run_backtest.py
 
 # 继续或重跑 WF 优化（断点续传）
