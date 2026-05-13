@@ -77,6 +77,9 @@ data*/
 backtest_cache/
 optuna_journal.log
 strategies/temp_strategy_*/
+# v4 门禁临时注入策略（由 gate_eval 生成）
+strategies/grid_multi_asset_v4/optimization/gate_injected_backtest.py
+strategies/grid_multi_asset_v5/optimization/gate_injected_backtest.py
 # 保留 results/ 下的 json/csv（优化结果），只排除大体积缓存
 !strategies/**/optimization/results/*.json
 !strategies/**/optimization/results/*.csv
