@@ -5,7 +5,7 @@
 **策略目录（规划）：** `strategies/grid_multi_asset_v5/`（及按需维护的 `strategies_jq/grid_multi_asset/v5/`，不强制双轨同步）  
 **基线代码：** fork 自 `strategies/grid_multi_asset_v4/`，**不得**改写 v2/v3/v4 既有行为；共享逻辑若有抽取须保持旧版回归可测。  
 **前置结论来源：** v4 在 **窄 ETF 固定池** 下 **II（全长相对沪深300）** 显著承压，见 [v4.0 `03-optimization-summary.md`](../v4.0/03-optimization-summary.md)。v5 在 **仍为单轨网格** 的前提下，通过 **Universe 锚定 + 可选熊市维 + 两阶段选参** 争取 **I ∧ II ∧ III** 可行域非空，并在可行域内 **优先推高绝对收益**。  
-**状态：** 设计已定稿（头脑风暴 §1～§3）；`02-plan.md` / 实现与 `03-optimization-summary.md` **待实施**。
+**状态：** 设计已定稿（头脑风暴 §1～§3）；[实施计划 `02-plan.md`](./02-plan.md) 已就绪；代码与 `03-optimization-summary.md` **待按任务实施**。
 
 ---
 
