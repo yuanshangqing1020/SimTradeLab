@@ -227,6 +227,24 @@ def _score_universe(vol_dict, fund_df, etf_codes, vol_weight):
     return list(zip(df['code'], df['score']))
 
 
+def build_grid_pool_anchor_first(ranked_codes, anchor_codes, max_hold):
+    """ranked_codes: 分数从高到低；anchor_codes: 锚定顺序（优先级递减）。
+    先按顺序放入「出现在 ranked_codes 中」的锚定（不超过 max_hold），
+    再按 ranked_codes 顺序补足名额。"""
+    ranked = list(ranked_codes)
+    in_ranked = set(ranked)
+    pool = []
+    for c in anchor_codes:
+        if c in in_ranked and len(pool) < max_hold:
+            pool.append(c)
+    for c in ranked:
+        if len(pool) >= max_hold:
+            break
+        if c not in pool:
+            pool.append(c)
+    return pool
+
+
 def _etf_list_for_mode(universe_mode):
     if universe_mode == 'WIDE_V2':
         return list(CANDIDATE_ETFS)
