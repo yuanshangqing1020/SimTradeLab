@@ -70,6 +70,19 @@ def _combined_etf_universe_for_mode(universe_mode):
 
 V5_COMBINED_POOL_SIZE = len(_combined_etf_universe_for_mode('ANCHOR_SATELLITE'))
 
+# BEAR + ETF_DEFENSIVE 时与当前 Universe 取交集（与 v3 列表一致）
+DEFENSIVE_ETF_POOL = [
+    '510300.SS',
+    '510500.SS',
+    '159915.SZ',
+    '588000.SS',
+    '512880.SS',
+]
+_DEFENSIVE_SET = frozenset(DEFENSIVE_ETF_POOL)
+
+# NO_NET_ADD：仅当标的昨日日终持仓市值 > EPS 时才限制不得高于昨收持仓
+_NET_ADD_EPS_POSITION_VALUE = 1e-6
+
 
 def _regime_refresh_day(day_counter, rebalance_freq, regime_refresh):
     """是否在本交易日刷新大盘 regime（进而更新 invested_ratio）。"""
@@ -104,10 +117,15 @@ def initialize(context):
     # WEEKLY | ON_REBALANCE_ONLY
     context.REGIME_REFRESH = 'WEEKLY'
 
+    context.BEAR_UNIVERSE_MODE = 'SAME'          # SAME | ETF_DEFENSIVE
+    context.BEAR_GRID_MODE = 'NORMAL'             # NORMAL | NO_NET_ADD | CAP_LAYER
+    context.BEAR_GRID_MAX_LAYER_CAP = 0
+
     context.pool           = []
     context.day_counter    = 0
     context.regime         = 'NEUTRAL'
     context.invested_ratio = context.NEUTRAL_RATIO
+    context._prev_eod_position_value = {}
 
 
 def handle_data(context, data):
@@ -132,6 +150,18 @@ def after_trading_end(context, data):
         held,
         context.portfolio.cash,
     ))
+    snap = {}
+    positions = getattr(context.portfolio, 'positions', {}) or {}
+    for code, pos in positions.items():
+        amt = getattr(pos, 'amount', 0) or 0
+        if amt <= 0:
+            continue
+        mv = getattr(pos, 'market_value', None)
+        if mv is None or not (isinstance(mv, (int, float)) and np.isfinite(float(mv))):
+            lp = getattr(pos, 'last_sale_price', 0)
+            mv = float(amt) * float(lp if lp else 0.0)
+        snap[code] = float(mv)
+    context._prev_eod_position_value = snap
 
 
 def _calc_vol_from_prices(prices):
@@ -198,6 +228,31 @@ def _apply_weight_cap(norm_w, max_w, iterations=3):
             new_result[i] = result[i] * (1.0 + excess / uncapped_total)
         result = new_result
     return result
+
+
+def _effective_max_layer_bear(regime, bear_grid_mode, grid_max_layer, bear_cap):
+    """BEAR + CAP_LAYER 时裁减网格层上限；否则沿用 grid_max_layer。"""
+    if regime != 'BEAR' or bear_grid_mode != 'CAP_LAYER':
+        return int(grid_max_layer)
+    return int(min(int(grid_max_layer), int(bear_cap)))
+
+
+def _apply_no_net_add_targets(prev_by_code, target_by_code):
+    """NO_NET_ADD：若昨日该标的有仓，则当日目标市值不得高于昨收持仓市值。"""
+    out = {}
+    prev_by_code = prev_by_code or {}
+    for code, tgt in target_by_code.items():
+        t = float(tgt)
+        if not np.isfinite(t):
+            out[code] = 0.0
+            continue
+        prev = prev_by_code.get(code)
+        pv = float(prev) if prev is not None and np.isfinite(prev) else 0.0
+        if pv > _NET_ADD_EPS_POSITION_VALUE:
+            out[code] = min(t, pv)
+        else:
+            out[code] = t
+    return out
 
 
 def _score_universe(vol_dict, fund_df, etf_codes, vol_weight):
@@ -316,12 +371,29 @@ def _detect_regime(context):
 
 
 def _refresh_pool(context):
-    etfs = _etf_list_for_mode(context.UNIVERSE_MODE)
+    base_etfs = list(_etf_list_for_mode(context.UNIVERSE_MODE))
+    bear_um = getattr(context, 'BEAR_UNIVERSE_MODE', 'SAME')
+    bear_def = context.regime == 'BEAR' and bear_um == 'ETF_DEFENSIVE'
     stocks = []
+
     if context.UNIVERSE_MODE == 'WIDE_V2':
-        stocks = list(set(
-            get_index_stocks('000300.SS') + get_index_stocks('000905.SS')
-        ))
+        if bear_def:
+            etfs = list(DEFENSIVE_ETF_POOL)
+            stocks = []
+        else:
+            etfs = base_etfs
+            stocks = list(set(
+                get_index_stocks('000300.SS') + get_index_stocks('000905.SS')
+            ))
+    elif bear_def:
+        etfs = [e for e in base_etfs if e in _DEFENSIVE_SET]
+        stocks = []
+        if not etfs:
+            log.warning('BEAR ETF_DEFENSIVE 与当前 Universe 无交集，保留原池')
+            return
+    else:
+        etfs = base_etfs
+
     all_cands = stocks + etfs
 
     if not all_cands:
@@ -421,6 +493,19 @@ def _execute_grid(context):
 
     N = len(context.pool)
 
+    bear_grid = getattr(context, 'BEAR_GRID_MODE', 'NORMAL')
+    eff_layer = _effective_max_layer_bear(
+        context.regime,
+        bear_grid,
+        context.GRID_MAX_LAYER,
+        getattr(context, 'BEAR_GRID_MAX_LAYER_CAP', 0),
+    )
+    layer_for_cap = (
+        eff_layer
+        if (context.regime == 'BEAR' and bear_grid == 'CAP_LAYER')
+        else context.GRID_MAX_LAYER
+    )
+
     try:
         hist = get_history(31, '1d', 'close', context.pool)
     except Exception as exc:
@@ -448,7 +533,7 @@ def _execute_grid(context):
             context.GRID_STEP_MIN,
             context.GRID_STEP_MAX,
         ))
-        layer = _calc_layer(price, ma20, step, context.GRID_MAX_LAYER)
+        layer = _calc_layer(price, ma20, step, eff_layer)
         layers.append(layer)
         active.append(code)
 
@@ -459,12 +544,18 @@ def _execute_grid(context):
               for lyr in layers]
     norm_w = _normalize_weights(raw_w)
 
-    max_w = (1.0 / N) * (1.0 + context.LAYER_FRACTION * context.GRID_MAX_LAYER)
+    max_w = (1.0 / N) * (1.0 + context.LAYER_FRACTION * layer_for_cap)
     norm_w = _apply_weight_cap(norm_w, max_w)
 
     tv  = context.portfolio.portfolio_value
     cap = tv * context.invested_ratio
     cap = min(cap, TARGET_CAPITAL)
 
-    for code, w in zip(active, norm_w):
-        order_target_value(code, cap * w)
+    target_by_code = {code: cap * w for code, w in zip(active, norm_w)}
+
+    if context.regime == 'BEAR' and bear_grid == 'NO_NET_ADD':
+        prev = getattr(context, '_prev_eod_position_value', {}) or {}
+        target_by_code = _apply_no_net_add_targets(prev, target_by_code)
+
+    for code, val in target_by_code.items():
+        order_target_value(code, val)

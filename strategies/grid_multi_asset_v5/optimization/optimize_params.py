@@ -34,6 +34,15 @@ NARROW_ETF_UNIVERSE = [
 NARROW_ETF_POOL_SIZE = len(NARROW_ETF_UNIVERSE)
 _ANCHOR_SET = frozenset(ANCHOR_ETF_UNIVERSE)
 
+DEFENSIVE_ETF_POOL = [
+    '510300.SS',
+    '510500.SS',
+    '159915.SZ',
+    '588000.SS',
+    '512880.SS',
+]
+_DEFENSIVE_SET_FS = frozenset(DEFENSIVE_ETF_POOL)
+
 
 def _v5_satellite_etfs():
     out = []
@@ -44,6 +53,17 @@ def _v5_satellite_etfs():
         out.append(x)
         seen.add(x)
     return out
+
+
+def _defensive_overlap_for_universe_mode(universe_mode):
+    if universe_mode == 'WIDE_V2':
+        return [e for e in CANDIDATE_ETFS if e in _DEFENSIVE_SET_FS]
+    if universe_mode == 'NARROW_ETF':
+        return [e for e in NARROW_ETF_UNIVERSE if e in _DEFENSIVE_SET_FS]
+    return [
+        e for e in (ANCHOR_ETF_UNIVERSE + _v5_satellite_etfs())
+        if e in _DEFENSIVE_SET_FS
+    ]
 
 
 def _v5_combined_anchor_satellite_size():
@@ -70,6 +90,9 @@ class GridMultiAssetV5Params(ParameterSpace):
     NEUTRAL_RATIO        = [0.50, 0.60, 0.70]
     BEAR_RATIO           = [0.25, 0.35, 0.45]
     MIN_ANCHORS_IN_POOL  = [1, 2]
+    BEAR_UNIVERSE_MODE   = ['SAME', 'ETF_DEFENSIVE']
+    BEAR_GRID_MODE       = ['NORMAL', 'CAP_LAYER', 'NO_NET_ADD']
+    BEAR_GRID_MAX_LAYER_CAP = [0, 1]
 
     @staticmethod
     def validate(params):
@@ -112,12 +135,20 @@ class GridMultiAssetV5Params(ParameterSpace):
                     min_a, params['MAX_HOLD'],
                 )
             )
+        if params['BEAR_UNIVERSE_MODE'] == 'ETF_DEFENSIVE':
+            if not _defensive_overlap_for_universe_mode(mode):
+                raise ValueError(
+                    'BEAR ETF_DEFENSIVE 与 UNIVERSE_MODE={} 下 ETF 无交集'.format(mode),
+                )
         return params
 
 
 V5_CUSTOM_MAPPING = {
-    'UNIVERSE_MODE':        'context.UNIVERSE_MODE',
-    'MIN_ANCHORS_IN_POOL':  'context.MIN_ANCHORS_IN_POOL',
+    'UNIVERSE_MODE':           'context.UNIVERSE_MODE',
+    'MIN_ANCHORS_IN_POOL':     'context.MIN_ANCHORS_IN_POOL',
+    'BEAR_UNIVERSE_MODE':      'context.BEAR_UNIVERSE_MODE',
+    'BEAR_GRID_MODE':          'context.BEAR_GRID_MODE',
+    'BEAR_GRID_MAX_LAYER_CAP': 'context.BEAR_GRID_MAX_LAYER_CAP',
     'MAX_HOLD':             'context.MAX_HOLD',
     'GRID_STEP_VOL_FACTOR': 'context.GRID_STEP_VOL_FACTOR',
     'GRID_STEP_MIN':        'context.GRID_STEP_MIN',

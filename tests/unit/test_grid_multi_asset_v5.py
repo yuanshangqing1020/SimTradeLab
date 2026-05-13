@@ -63,6 +63,24 @@ def test_v5_combined_size_matches_optimize_params():
     assert ns['V5_COMBINED_POOL_SIZE'] == opt.V5_COMB_UNIVERSE_SIZE
 
 
+def test_effective_max_layer_bear_cap_layer():
+    ns = _load_template_ns()
+    fn = ns['_effective_max_layer_bear']
+    assert fn('BEAR', 'CAP_LAYER', 2, 0) == 0
+    assert fn('BEAR', 'NORMAL', 2, 0) == 2
+    assert fn('NEUTRAL', 'CAP_LAYER', 2, 0) == 2
+
+
+def test_apply_no_net_add_clips_to_prev():
+    ns = _load_template_ns()
+    fn = ns['_apply_no_net_add_targets']
+    prev = {'510300.SS': 1000.0}
+    tgt = {'510300.SS': 2000.0, '159915.SZ': 500.0}
+    out = fn(prev, tgt)
+    assert out['510300.SS'] == 1000.0
+    assert out['159915.SZ'] == 500.0
+
+
 def _load_optimize_params():
     import importlib.util
 
@@ -83,6 +101,9 @@ class TestGridMultiAssetV5ParamsValidate:
             opt.GridMultiAssetV5Params.validate({
                 'UNIVERSE_MODE': 'ANCHOR_SATELLITE',
                 'MIN_ANCHORS_IN_POOL': 1,
+                'BEAR_UNIVERSE_MODE': 'SAME',
+                'BEAR_GRID_MODE': 'NORMAL',
+                'BEAR_GRID_MAX_LAYER_CAP': 0,
                 'MAX_HOLD': cap + 1,
                 'GRID_STEP_MIN': 0.01,
                 'GRID_STEP_MAX': 0.05,
@@ -97,6 +118,9 @@ class TestGridMultiAssetV5ParamsValidate:
         p = opt.GridMultiAssetV5Params.validate({
             'UNIVERSE_MODE': 'ANCHOR_SATELLITE',
             'MIN_ANCHORS_IN_POOL': 1,
+            'BEAR_UNIVERSE_MODE': 'SAME',
+            'BEAR_GRID_MODE': 'CAP_LAYER',
+            'BEAR_GRID_MAX_LAYER_CAP': 0,
             'MAX_HOLD': 6,
             'GRID_STEP_MIN': 0.01,
             'GRID_STEP_MAX': 0.05,
