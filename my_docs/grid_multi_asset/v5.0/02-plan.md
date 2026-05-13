@@ -82,7 +82,7 @@
 - Create: `strategies/grid_multi_asset_v5/optimization/results/.gitkeep`
 - Create: `strategies/grid_multi_asset_v5/stats/.gitkeep`
 
-- [ ] **Step 1：** 递归复制 `strategies/grid_multi_asset_v4/` → `strategies/grid_multi_asset_v5/`（含 `optimization`），删除 `optimization/results/*.csv` 若被复制（只保留 `.gitkeep`）。
+- [ ] **Step 1：** 递归复制 `strategies/grid_multi_asset_v4/` → `strategies/grid_multi_asset_v5/`（含 `optimization`）。**必须排除** 名为 **`backtest_cache/`** 的目录（体积大、且为运行产物，勿进版本库或二次复制）。推荐：`rsync -a --exclude='backtest_cache' strategies/grid_multi_asset_v4/ strategies/grid_multi_asset_v5/`（首次建 `v5` 时）或等价 `cp`/`tar` 排除规则。复制后删除 `optimization/results/*.csv` 若存在（只保留 `.gitkeep`）；删除误入的嵌套副本（如 `grid_multi_asset_v5/grid_multi_asset_v4/`）。
 - [ ] **Step 2：** 全文替换文件名注释与日志中的 `v4` → `v5`、`grid_multi_asset_v4` → `grid_multi_asset_v5`、`GridMultiAssetV4Params` → `GridMultiAssetV5Params`、`V4_CUSTOM_MAPPING` → `V5_CUSTOM_MAPPING`。
 - [ ] **Step 3：** `gate_eval.py` 内 **`strategy_name` / 临时文件路径** 指向 `grid_multi_asset_v5`。
 - [ ] **Step 4：** 运行冒烟（应等价于尚未改逻辑的 v4）：
@@ -92,7 +92,9 @@ cd /mnt/c/QMTReal/SimTrade/SimTradeLab
 conda run -n SimTrade python -c "
 from pathlib import Path
 p = Path('strategies/grid_multi_asset_v5/template.py')
-assert 'grid_multi_asset_v5' in p.read_text(encoding='utf-8').lower() or 'v5' in p.read_text(encoding='utf-8')
+t = p.read_text(encoding='utf-8')
+assert '# strategies/grid_multi_asset_v5/template.py' in t
+assert 'grid_multi_asset_v4' not in t
 print('ok')
 "
 ```
