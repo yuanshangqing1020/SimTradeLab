@@ -51,6 +51,18 @@ def test_build_grid_pool_respects_max_hold():
     assert fn(ranked, anchors, max_hold=2) == ['A', 'B']
 
 
+def test_satellite_universe_at_least_eight():
+    ns = _load_template_ns()
+    sat = ns['SATELLITE_ETF_UNIVERSE']
+    assert len(sat) >= 8
+
+
+def test_v5_combined_size_matches_optimize_params():
+    ns = _load_template_ns()
+    opt = _load_optimize_params()
+    assert ns['V5_COMBINED_POOL_SIZE'] == opt.V5_COMB_UNIVERSE_SIZE
+
+
 def _load_optimize_params():
     import importlib.util
 
@@ -65,10 +77,13 @@ def _load_optimize_params():
 class TestGridMultiAssetV5ParamsValidate:
     def test_max_hold_exceeds_pool_rejected(self):
         opt = _load_optimize_params()
+        cap = opt.V5_COMB_UNIVERSE_SIZE
 
-        with pytest.raises(ValueError, match='窄 ETF'):
+        with pytest.raises(ValueError, match='候选上限'):
             opt.GridMultiAssetV5Params.validate({
-                'MAX_HOLD': 7,
+                'UNIVERSE_MODE': 'ANCHOR_SATELLITE',
+                'MIN_ANCHORS_IN_POOL': 1,
+                'MAX_HOLD': cap + 1,
                 'GRID_STEP_MIN': 0.01,
                 'GRID_STEP_MAX': 0.05,
                 'BEAR_RATIO': 0.25,
@@ -80,6 +95,8 @@ class TestGridMultiAssetV5ParamsValidate:
         opt = _load_optimize_params()
 
         p = opt.GridMultiAssetV5Params.validate({
+            'UNIVERSE_MODE': 'ANCHOR_SATELLITE',
+            'MIN_ANCHORS_IN_POOL': 1,
             'MAX_HOLD': 6,
             'GRID_STEP_MIN': 0.01,
             'GRID_STEP_MAX': 0.05,

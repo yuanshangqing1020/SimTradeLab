@@ -6,6 +6,7 @@
 逻辑与 template.py 一致；最优参数由 Walk-Forward 与三重门禁流程写入后用于验证。
 初始资金建议 50 万。
 """
+
 import numpy as np
 
 # 全市场 ETF 母本（WIDE_V2 与 v2 一致）
@@ -15,7 +16,14 @@ CANDIDATE_ETFS = [
     '512170.SS', '512760.SS', '159792.SZ', '513100.SS', '513050.SS',
 ]
 
-# v4 默认：6 只高流动性宽基/跨境/科创（名称见下注释）
+# 锚定：贴近沪深300 / 宽基（换仓时优先保留）
+ANCHOR_ETF_UNIVERSE = [
+    '510300.SS',  # 沪深300ETF
+    '510500.SS',  # 中证500ETF
+]
+_ANCHOR_SET = frozenset(ANCHOR_ETF_UNIVERSE)
+
+# v4 窄池六只（历史对照；卫星构建时仍会用到其中非锚定标的）
 NARROW_ETF_UNIVERSE = [
     '510300.SS',  # 沪深300ETF
     '510500.SS',  # 中证500ETF
@@ -25,9 +33,39 @@ NARROW_ETF_UNIVERSE = [
     '588000.SS',  # 科创50ETF
 ]
 
+
+def _build_satellite_etf_universe():
+    """NARROW ∪ CANDIDATE 去锚定、保序去重，供 ANCHOR_SATELLITE 卫星腿。"""
+    out = []
+    seen = set()
+    for x in list(NARROW_ETF_UNIVERSE) + list(CANDIDATE_ETFS):
+        if x in _ANCHOR_SET or x in seen:
+            continue
+        out.append(x)
+        seen.add(x)
+    return out
+
+
+SATELLITE_ETF_UNIVERSE = _build_satellite_etf_universe()
+
 NARROW_ETF_POOL_SIZE = len(NARROW_ETF_UNIVERSE)
 
 TARGET_CAPITAL = 500000.0
+
+
+def _combined_etf_universe_for_mode(universe_mode):
+    if universe_mode == 'WIDE_V2':
+        return list(CANDIDATE_ETFS)
+    merged = []
+    seen = set()
+    for x in list(ANCHOR_ETF_UNIVERSE) + list(SATELLITE_ETF_UNIVERSE):
+        if x not in seen:
+            merged.append(x)
+            seen.add(x)
+    return merged
+
+
+V5_COMBINED_POOL_SIZE = len(_combined_etf_universe_for_mode('ANCHOR_SATELLITE'))
 
 
 def _regime_refresh_day(day_counter, rebalance_freq, regime_refresh):
@@ -57,8 +95,9 @@ def initialize(context):
     context.NEUTRAL_RATIO = 0.50
     context.BEAR_RATIO    = 0.45
 
-    # NARROW_ETF | WIDE_V2（优化器可注入对照）
-    context.UNIVERSE_MODE = 'NARROW_ETF'
+    # ANCHOR_SATELLITE | WIDE_V2 | NARROW_ETF（窄池 6 只，与 v4 对齐仅作对照）
+    context.UNIVERSE_MODE = 'ANCHOR_SATELLITE'
+    context.MIN_ANCHORS_IN_POOL = 1
     # WEEKLY | ON_REBALANCE_ONLY
     context.REGIME_REFRESH = 'WEEKLY'
 
@@ -224,10 +263,30 @@ def _score_universe(vol_dict, fund_df, etf_codes, vol_weight):
     return list(zip(df['code'], df['score']))
 
 
+def build_grid_pool_anchor_first(ranked_codes, anchor_codes, max_hold):
+    """ranked_codes: 分数从高到低；anchor_codes: 锚定顺序（优先级递减）。
+    先按顺序放入「出现在 ranked_codes 中」的锚定（不超过 max_hold），
+    再按 ranked_codes 顺序补足名额。"""
+    ranked = list(ranked_codes)
+    in_ranked = set(ranked)
+    pool = []
+    for c in anchor_codes:
+        if c in in_ranked and len(pool) < max_hold:
+            pool.append(c)
+    for c in ranked:
+        if len(pool) >= max_hold:
+            break
+        if c not in pool:
+            pool.append(c)
+    return pool
+
+
 def _etf_list_for_mode(universe_mode):
     if universe_mode == 'WIDE_V2':
         return list(CANDIDATE_ETFS)
-    return list(NARROW_ETF_UNIVERSE)
+    if universe_mode == 'NARROW_ETF':
+        return list(NARROW_ETF_UNIVERSE)
+    return _combined_etf_universe_for_mode('ANCHOR_SATELLITE')
 
 
 def _max_hold_cap(universe_mode):
@@ -319,8 +378,25 @@ def _refresh_pool(context):
         log.warning('波动率计算全部失败，保留原池')
         return
 
-    ranked = _score_universe(vol_dict, fund_df, etfs, context.VOL_WEIGHT)
-    new_pool = [code for code, _ in ranked[:max_hold]]
+    ranked_pairs = _score_universe(vol_dict, fund_df, etfs, context.VOL_WEIGHT)
+    ranked_codes = [code for code, _ in ranked_pairs]
+
+    if context.UNIVERSE_MODE == 'WIDE_V2':
+        new_pool = [code for code, _ in ranked_pairs[:max_hold]]
+    elif context.UNIVERSE_MODE == 'ANCHOR_SATELLITE':
+        new_pool = build_grid_pool_anchor_first(
+            ranked_codes, ANCHOR_ETF_UNIVERSE, max_hold,
+        )
+        min_a = int(getattr(context, 'MIN_ANCHORS_IN_POOL', 1))
+        tradable_anchor = [c for c in ANCHOR_ETF_UNIVERSE if c in vol_dict]
+        n_anchor_in = sum(1 for c in new_pool if c in _ANCHOR_SET)
+        if len(tradable_anchor) >= min_a and n_anchor_in < min_a:
+            log.warning(
+                '锚定不足: 目标至少 %d 只锚定，实际入池 %d — 保留原池' % (min_a, n_anchor_in),
+            )
+            return
+    else:
+        new_pool = [code for code, _ in ranked_pairs[:max_hold]]
 
     old_set = set(context.pool)
     new_set = set(new_pool)

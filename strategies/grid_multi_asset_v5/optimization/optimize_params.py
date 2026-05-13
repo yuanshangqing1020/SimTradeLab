@@ -3,7 +3,7 @@
 """
 多标的自适应网格策略 v5 — Walk-Forward 参数优化
 
-参数空间在 v2 基础上将 MAX_HOLD 收窄为适合默认窄 ETF 池（最多 6 只）的候选。
+参数空间含 UNIVERSE_MODE（ANCHOR_SATELLITE / WIDE_V2）、合并 ETF 池下的 MAX_HOLD、MIN_ANCHORS_IN_POOL 等。
 三重门禁（FULL/RECENT/II/I）在 WF 结束后由 gate_eval.py / post_select_eligible.py 批处理。
 
 运行:
@@ -16,14 +16,49 @@ from simtradelab.backtest.optimizer_framework import (
     optimize_strategy,
 )
 
+# 与 template.py 保持一致的池规模（修改 template 常量时请同步此处）
+CANDIDATE_ETFS = [
+    '510300.SS', '510500.SS', '159915.SZ', '512880.SS', '512690.SS',
+    '512010.SS', '515050.SS', '512480.SS', '159949.SZ', '588000.SS',
+    '512170.SS', '512760.SS', '159792.SZ', '513100.SS', '513050.SS',
+]
+ANCHOR_ETF_UNIVERSE = ['510300.SS', '510500.SS']
+NARROW_ETF_UNIVERSE = [
+    '510300.SS',
+    '510500.SS',
+    '159915.SZ',
+    '512010.SS',
+    '513100.SS',
+    '588000.SS',
+]
+NARROW_ETF_POOL_SIZE = len(NARROW_ETF_UNIVERSE)
+_ANCHOR_SET = frozenset(ANCHOR_ETF_UNIVERSE)
 
-NARROW_ETF_POOL_SIZE = 6  # 与 template.NARROW_ETF_UNIVERSE 长度一致
+
+def _v5_satellite_etfs():
+    out = []
+    seen = set()
+    for x in NARROW_ETF_UNIVERSE + CANDIDATE_ETFS:
+        if x in _ANCHOR_SET or x in seen:
+            continue
+        out.append(x)
+        seen.add(x)
+    return out
+
+
+def _v5_combined_anchor_satellite_size():
+    sat = _v5_satellite_etfs()
+    return len(ANCHOR_ETF_UNIVERSE) + len(sat)
+
+
+V5_COMB_UNIVERSE_SIZE = _v5_combined_anchor_satellite_size()
 
 
 class GridMultiAssetV5Params(ParameterSpace):
-    """v5 可调参数（默认窄池 MAX_HOLD ≤ 6）。"""
+    """v5 可调参数（ANCHOR_SATELLITE 下 MAX_HOLD ≤ 合并池长）。"""
 
-    MAX_HOLD             = [3, 4, 5, 6]
+    UNIVERSE_MODE        = ['ANCHOR_SATELLITE', 'WIDE_V2']
+    MAX_HOLD             = [k for k in [3, 4, 5, 6, 8, 10] if k <= V5_COMB_UNIVERSE_SIZE]
     GRID_STEP_VOL_FACTOR = [0.30, 0.45, 0.60]
     GRID_STEP_MIN        = [0.01, 0.02]
     GRID_STEP_MAX        = [0.03, 0.05]
@@ -34,6 +69,7 @@ class GridMultiAssetV5Params(ParameterSpace):
     BULL_RATIO           = [0.70, 0.80, 0.90]
     NEUTRAL_RATIO        = [0.50, 0.60, 0.70]
     BEAR_RATIO           = [0.25, 0.35, 0.45]
+    MIN_ANCHORS_IN_POOL  = [1, 2]
 
     @staticmethod
     def validate(params):
@@ -50,16 +86,38 @@ class GridMultiAssetV5Params(ParameterSpace):
                     params['BEAR_RATIO'], params['NEUTRAL_RATIO'], params['BULL_RATIO'],
                 )
             )
-        if params['MAX_HOLD'] > NARROW_ETF_POOL_SIZE:
+        mode = params['UNIVERSE_MODE']
+        if mode == 'WIDE_V2':
+            cap = len(CANDIDATE_ETFS)
+        elif mode == 'NARROW_ETF':
+            cap = NARROW_ETF_POOL_SIZE
+        else:
+            cap = V5_COMB_UNIVERSE_SIZE
+        if params['MAX_HOLD'] > cap:
             raise ValueError(
-                'MAX_HOLD={} 大于窄 ETF 池规模 {}'.format(
-                    params['MAX_HOLD'], NARROW_ETF_POOL_SIZE,
+                'MAX_HOLD={} 大于 {} 模式下的候选上限 {}'.format(
+                    params['MAX_HOLD'], mode, cap,
+                )
+            )
+        min_a = params['MIN_ANCHORS_IN_POOL']
+        if min_a > len(ANCHOR_ETF_UNIVERSE):
+            raise ValueError(
+                'MIN_ANCHORS_IN_POOL={} 大于锚定池只数 {}'.format(
+                    min_a, len(ANCHOR_ETF_UNIVERSE),
+                )
+            )
+        if min_a > params['MAX_HOLD']:
+            raise ValueError(
+                'MIN_ANCHORS_IN_POOL={} 大于 MAX_HOLD={}'.format(
+                    min_a, params['MAX_HOLD'],
                 )
             )
         return params
 
 
 V5_CUSTOM_MAPPING = {
+    'UNIVERSE_MODE':        'context.UNIVERSE_MODE',
+    'MIN_ANCHORS_IN_POOL':  'context.MIN_ANCHORS_IN_POOL',
     'MAX_HOLD':             'context.MAX_HOLD',
     'GRID_STEP_VOL_FACTOR': 'context.GRID_STEP_VOL_FACTOR',
     'GRID_STEP_MIN':        'context.GRID_STEP_MIN',
