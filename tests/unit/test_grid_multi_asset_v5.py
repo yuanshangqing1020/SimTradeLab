@@ -81,6 +81,66 @@ def test_apply_no_net_add_clips_to_prev():
     assert out['159915.SZ'] == 500.0
 
 
+def _load_gate_eval():
+    import importlib.util
+
+    p = (
+        Path(__file__).parents[2]
+        / 'strategies'
+        / 'grid_multi_asset_v5'
+        / 'optimization'
+        / 'gate_eval.py'
+    )
+    spec = importlib.util.spec_from_file_location('_v5_gate_unit', str(p))
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_check_gates_equals_i_ii_and_iii():
+    ge = _load_gate_eval()
+    thr = ge.GateThresholds()
+    m_full = {
+        'max_drawdown': -0.20,
+        'excess_return': 0.0,
+        'information_ratio': 0.0,
+    }
+    m_recent = {
+        'annual_return': 0.25,
+        'max_drawdown': -0.10,
+        'sharpe_ratio': 1.5,
+    }
+    ok, _ = ge.check_gates(m_full, m_recent, thr)
+    ok12, _ = ge.check_gates_i_ii_only(m_full, thr)
+    ok3, _ = ge.check_gates_iii_only(m_recent, thr)
+    assert ok == (ok12 and ok3)
+
+
+def test_row_to_params_two_stage():
+    import importlib.util
+
+    p = (
+        Path(__file__).parents[2]
+        / 'strategies'
+        / 'grid_multi_asset_v5'
+        / 'optimization'
+        / 'two_stage_select.py'
+    )
+    spec = importlib.util.spec_from_file_location('_v5_ts_unit', str(p))
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    row = pd.Series({
+        'number': 1,
+        'params_MAX_HOLD': 6.0,
+        'params_UNIVERSE_MODE': 'ANCHOR_SATELLITE',
+    })
+    d = mod.row_to_params(row)
+    assert d['MAX_HOLD'] == 6
+    assert d['UNIVERSE_MODE'] == 'ANCHOR_SATELLITE'
+
+
 def _load_optimize_params():
     import importlib.util
 

@@ -25,8 +25,10 @@ from simtradelab.backtest.config import BacktestConfig
 if __name__ == '__main__':
     # ==================== 回测配置 ====================
 
-    # 策略：v3 最优 Trial 357 已写入 strategies/grid_multi_asset_v3/backtest.py
-    strategy_name = 'grid_multi_asset_v3'
+    # 策略：v5 Trial 190 默认参数见 strategies/grid_multi_asset_v5/backtest.py
+    strategy_name = 'grid_multi_asset_v5'
+    # strategy_name = 'grid_multi_asset_v4'
+    # strategy_name = 'grid_multi_asset_v3'
     # strategy_name = 'grid_multi_asset_v2'
 
     # 全长口径与 my_docs v1/v2/v3 总结 §5.2 对齐（2019-01-01～2026-04-20）

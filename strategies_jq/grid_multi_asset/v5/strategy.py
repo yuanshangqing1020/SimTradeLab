@@ -1,44 +1,44 @@
-# strategies/grid_multi_asset_v5/template.py
 # -*- coding: utf-8 -*-
 """
-多标的自适应网格策略 v5
+多标的自适应网格策略 v5.0（JoinQuant 版）
 
-在 v2 内核之上：
-  - 默认 ANCHOR_SATELLITE：锚定 ETF + 卫星 ETF 合并池，换仓时锚定优先入池
-  - 可选 WIDE_V2：成分股 + 全 ETF 母本（与 v2 一致）
-  - 大盘 regime：WEEKLY 时每 5 个交易日刷新 invested_ratio；换股仍仅 REBALANCE_FREQ
+移植自 SimTradeLab ``strategies/grid_multi_asset_v5/template.py`` / ``backtest.py``。
+默认参数与 **Trial 190**（``best_params_20260514_122926.json``）一致。
 
-参数：由 optimization/optimize_params.py Walk-Forward 注入
+v5 相对 v4：
+  - **ANCHOR_SATELLITE**：锚定 ETF + 卫星合并池，换仓 **``build_grid_pool_anchor_first``**
+  - **UNIVERSE_MODE**：``WIDE_V2`` | ``ANCHOR_SATELLITE`` | ``NARROW_ETF``
+  - **BEAR 小维**：``BEAR_UNIVERSE_MODE``（``SAME`` / ``ETF_DEFENSIVE``）、``BEAR_GRID_MODE``（``NORMAL`` / ``CAP_LAYER`` / ``NO_NET_ADD``）
+  - **周频 regime**：``g.REGIME_REFRESH=WEEKLY`` 时，换仓日或每 **5** 个交易日刷新大盘状态与 ``g.invested_ratio``
+
+PTrade → JoinQuant 映射同 ``v4/strategy.py``、仓库 ``strategies_jq/grid_multi_asset/README.md``。
 """
 import numpy as np
+import pandas as pd
 
-# 全市场 ETF 母本（WIDE_V2 与 v2 一致）
 CANDIDATE_ETFS = [
-    '510300.SS', '510500.SS', '159915.SZ', '512880.SS', '512690.SS',
-    '512010.SS', '515050.SS', '512480.SS', '159949.SZ', '588000.SS',
-    '512170.SS', '512760.SS', '159792.SZ', '513100.SS', '513050.SS',
+    '510300.XSHG', '510500.XSHG', '159915.XSHE', '512880.XSHG', '512690.XSHG',
+    '512010.XSHG', '515050.XSHG', '512480.XSHG', '159949.XSHE', '588000.XSHG',
+    '512170.XSHG', '512760.XSHG', '159792.XSHE', '513100.XSHG', '513050.XSHG',
 ]
 
-# 锚定：贴近沪深300 / 宽基（换仓时优先保留）
 ANCHOR_ETF_UNIVERSE = [
-    '510300.SS',  # 沪深300ETF
-    '510500.SS',  # 中证500ETF
+    '510300.XSHG',
+    '510500.XSHG',
 ]
 _ANCHOR_SET = frozenset(ANCHOR_ETF_UNIVERSE)
 
-# v4 窄池六只（历史对照；卫星构建时仍会用到其中非锚定标的）
 NARROW_ETF_UNIVERSE = [
-    '510300.SS',  # 沪深300ETF
-    '510500.SS',  # 中证500ETF
-    '159915.SZ',  # 创业板ETF
-    '512010.SS',  # 医药ETF
-    '513100.SS',  # 纳指ETF
-    '588000.SS',  # 科创50ETF
+    '510300.XSHG',
+    '510500.XSHG',
+    '159915.XSHE',
+    '512010.XSHG',
+    '513100.XSHG',
+    '588000.XSHE',
 ]
 
 
 def _build_satellite_etf_universe():
-    """NARROW ∪ CANDIDATE 去锚定、保序去重，供 ANCHOR_SATELLITE 卫星腿。"""
     out = []
     seen = set()
     for x in list(NARROW_ETF_UNIVERSE) + list(CANDIDATE_ETFS):
@@ -51,9 +51,18 @@ def _build_satellite_etf_universe():
 
 SATELLITE_ETF_UNIVERSE = _build_satellite_etf_universe()
 
-NARROW_ETF_POOL_SIZE = len(NARROW_ETF_UNIVERSE)
+DEFENSIVE_ETF_POOL = [
+    '510300.XSHG',
+    '510500.XSHG',
+    '159915.XSHE',
+    '588000.XSHG',
+    '512880.XSHG',
+]
+_DEFENSIVE_SET = frozenset(DEFENSIVE_ETF_POOL)
 
 TARGET_CAPITAL = 500000.0
+BENCHMARK_CODE = '000300.XSHG'
+_NET_ADD_EPS_POSITION_VALUE = 1e-6
 
 
 def _combined_etf_universe_for_mode(universe_mode):
@@ -68,100 +77,100 @@ def _combined_etf_universe_for_mode(universe_mode):
     return merged
 
 
-V5_COMBINED_POOL_SIZE = len(_combined_etf_universe_for_mode('ANCHOR_SATELLITE'))
-
-# BEAR + ETF_DEFENSIVE 时与当前 Universe 取交集（与 v3 列表一致）
-DEFENSIVE_ETF_POOL = [
-    '510300.SS',
-    '510500.SS',
-    '159915.SZ',
-    '588000.SS',
-    '512880.SS',
-]
-_DEFENSIVE_SET = frozenset(DEFENSIVE_ETF_POOL)
-
-# NO_NET_ADD：仅当标的昨日日终持仓市值 > EPS 时才限制不得高于昨收持仓
-_NET_ADD_EPS_POSITION_VALUE = 1e-6
-
-
 def _regime_refresh_day(day_counter, rebalance_freq, regime_refresh):
-    """是否在本交易日刷新大盘 regime（进而更新 invested_ratio）。"""
     is_rebalance = (day_counter == 1) or (day_counter % rebalance_freq == 0)
     if regime_refresh == 'ON_REBALANCE_ONLY':
         return is_rebalance
-    # WEEKLY：换仓日一定刷新；其余每 5 个交易日刷新一次
     return is_rebalance or ((day_counter - 1) % 5 == 0)
 
 
 def initialize(context):
-    set_benchmark('000300.SS')
-    set_slippage(slippage=0.00246)
+    set_benchmark(BENCHMARK_CODE)
+    set_option('use_real_price', True)
 
-    # ── 归档参数（Trial 190，见 results/best_params_20260514_122926.json）── #
-    context.MAX_HOLD             = 3
-    context.GRID_STEP_VOL_FACTOR = 0.6
-    context.GRID_STEP_MIN        = 0.01
-    context.GRID_STEP_MAX        = 0.05
-    context.GRID_MAX_LAYER       = 2
-    context.LAYER_FRACTION       = 0.08
-    context.VOL_WEIGHT           = 0.5
-    context.REBALANCE_FREQ       = 5
+    set_order_cost(OrderCost(
+        open_tax=0,
+        close_tax=0.001,
+        open_commission=0.0003,
+        close_commission=0.0003,
+        min_commission=5,
+    ), type='stock')
+    set_order_cost(OrderCost(
+        open_tax=0,
+        close_tax=0,
+        open_commission=0.0003,
+        close_commission=0.0003,
+        min_commission=5,
+    ), type='fund')
 
-    context.BULL_RATIO    = 0.7
-    context.NEUTRAL_RATIO = 0.5
-    context.BEAR_RATIO    = 0.45
+    set_slippage(PriceRelatedSlippage(0.00246))
 
-    # ANCHOR_SATELLITE | WIDE_V2 | NARROW_ETF（窄池 6 只，与 v4 对齐仅作对照）
-    context.UNIVERSE_MODE = 'WIDE_V2'
-    context.MIN_ANCHORS_IN_POOL = 2
-    # WEEKLY | ON_REBALANCE_ONLY
-    context.REGIME_REFRESH = 'WEEKLY'
+    # Trial 190（SimTradeLab best_params_20260514_122926.json）
+    g.MAX_HOLD             = 3
+    g.GRID_STEP_VOL_FACTOR = 0.6
+    g.GRID_STEP_MIN        = 0.01
+    g.GRID_STEP_MAX        = 0.05
+    g.GRID_MAX_LAYER       = 2
+    g.LAYER_FRACTION       = 0.08
+    g.VOL_WEIGHT           = 0.5
+    g.REBALANCE_FREQ       = 5
 
-    context.BEAR_UNIVERSE_MODE = 'SAME'  # SAME | ETF_DEFENSIVE
-    context.BEAR_GRID_MODE = 'CAP_LAYER'  # NORMAL | NO_NET_ADD | CAP_LAYER
-    context.BEAR_GRID_MAX_LAYER_CAP = 0
+    g.BULL_RATIO    = 0.70
+    g.NEUTRAL_RATIO = 0.50
+    g.BEAR_RATIO    = 0.45
 
-    context.pool           = []
-    context.day_counter    = 0
-    context.regime         = 'NEUTRAL'
-    context.invested_ratio = context.NEUTRAL_RATIO
-    context._prev_eod_position_value = {}
+    g.UNIVERSE_MODE = 'WIDE_V2'
+    g.MIN_ANCHORS_IN_POOL = 2
+    g.REGIME_REFRESH = 'WEEKLY'
+
+    g.BEAR_UNIVERSE_MODE      = 'SAME'
+    g.BEAR_GRID_MODE          = 'CAP_LAYER'
+    g.BEAR_GRID_MAX_LAYER_CAP = 0
+
+    g.pool                     = []
+    g.day_counter              = 0
+    g.regime                   = 'NEUTRAL'
+    g.invested_ratio           = g.NEUTRAL_RATIO
+    g._prev_eod_position_value = {}
+
+    run_daily(trade, time='14:50')
 
 
-def handle_data(context, data):
-    context.day_counter += 1
-    dc = context.day_counter
-    rf = context.REBALANCE_FREQ
-    if _regime_refresh_day(dc, rf, context.REGIME_REFRESH):
+def trade(context):
+    g.day_counter += 1
+    dc = g.day_counter
+    rf = g.REBALANCE_FREQ
+    if _regime_refresh_day(dc, rf, g.REGIME_REFRESH):
         _detect_regime(context)
     if dc == 1 or dc % rf == 0:
         _refresh_pool(context)
     _execute_grid(context)
 
 
-def after_trading_end(context, data):
-    held = sum(1 for p in context.portfolio.positions.values() if p.amount > 0)
+def after_trading_end(context):
+    held = sum(1 for p in context.portfolio.positions.values() if p.total_amount > 0)
     log.info('日终 | %s | 投入%.0f%% | %s | 总资产: %.0f | 网格池: %d只 | 持仓: %d只 | 现金: %.0f' % (
-        context.regime,
-        context.invested_ratio * 100,
-        context.UNIVERSE_MODE,
-        context.portfolio.portfolio_value,
-        len(context.pool),
+        g.regime,
+        g.invested_ratio * 100,
+        g.UNIVERSE_MODE,
+        context.portfolio.total_value,
+        len(g.pool),
         held,
         context.portfolio.cash,
     ))
     snap = {}
-    positions = getattr(context.portfolio, 'positions', {}) or {}
-    for code, pos in positions.items():
-        amt = getattr(pos, 'amount', 0) or 0
+    cd = get_current_data()
+    for code, pos in context.portfolio.positions.items():
+        amt = pos.total_amount
         if amt <= 0:
             continue
-        mv = getattr(pos, 'market_value', None)
-        if mv is None or not (isinstance(mv, (int, float)) and np.isfinite(float(mv))):
-            lp = getattr(pos, 'last_sale_price', 0)
-            mv = float(amt) * float(lp if lp else 0.0)
-        snap[code] = float(mv)
-    context._prev_eod_position_value = snap
+        px = 0.0
+        if code in cd:
+            px = float(cd[code].last_price or 0)
+        if px <= 0:
+            px = float(pos.avg_cost or 0)
+        snap[code] = float(amt) * px
+    g._prev_eod_position_value = snap
 
 
 def _calc_vol_from_prices(prices):
@@ -231,14 +240,12 @@ def _apply_weight_cap(norm_w, max_w, iterations=3):
 
 
 def _effective_max_layer_bear(regime, bear_grid_mode, grid_max_layer, bear_cap):
-    """BEAR + CAP_LAYER 时裁减网格层上限；否则沿用 grid_max_layer。"""
     if regime != 'BEAR' or bear_grid_mode != 'CAP_LAYER':
         return int(grid_max_layer)
     return int(min(int(grid_max_layer), int(bear_cap)))
 
 
 def _apply_no_net_add_targets(prev_by_code, target_by_code):
-    """NO_NET_ADD：若昨日该标的有仓，则当日目标市值不得高于昨收持仓市值。"""
     out = {}
     prev_by_code = prev_by_code or {}
     for code, tgt in target_by_code.items():
@@ -256,8 +263,6 @@ def _apply_no_net_add_targets(prev_by_code, target_by_code):
 
 
 def _score_universe(vol_dict, fund_df, etf_codes, vol_weight):
-    import pandas as pd
-
     if not vol_dict:
         return []
 
@@ -266,22 +271,19 @@ def _score_universe(vol_dict, fund_df, etf_codes, vol_weight):
 
     stock_codes = [c for c in vol_dict if c not in etf_set]
     if stock_codes and fund_df is not None and len(fund_df) > 0:
-        if 'code' in fund_df.columns:
-            fd = fund_df.set_index('code')
-        else:
-            fd = fund_df
+        fd = fund_df.set_index('code') if 'code' in fund_df.columns else fund_df
         for code in stock_codes:
             if code not in vol_dict or code not in fd.index:
                 continue
             row = fd.loc[code]
-            pe   = float(row['pe_ttm'])    if 'pe_ttm'    in fd.columns else None
-            roe  = float(row['roe'])        if 'roe'        in fd.columns else 0.0
-            mcap = float(row['total_value']) if 'total_value' in fd.columns else None
+            pe = float(row['pe_ratio']) if 'pe_ratio' in fd.columns else None
+            roe = float(row['roe']) if 'roe' in fd.columns else 0.0
+            mcap = float(row['market_cap']) if 'market_cap' in fd.columns else None
             if pe is None or mcap is None:
                 continue
             if not (np.isfinite(pe) and 0 < pe < 120):
                 continue
-            if not (np.isfinite(mcap) and mcap >= 3e9):
+            if not (np.isfinite(mcap) and mcap >= 30):
                 continue
             roe = roe if np.isfinite(roe) else 0.0
             records.append({
@@ -322,9 +324,6 @@ def _score_universe(vol_dict, fund_df, etf_codes, vol_weight):
 
 
 def build_grid_pool_anchor_first(ranked_codes, anchor_codes, max_hold):
-    """ranked_codes: 分数从高到低；anchor_codes: 锚定顺序（优先级递减）。
-    先按顺序放入「出现在 ranked_codes 中」的锚定（不超过 max_hold），
-    再按 ranked_codes 顺序补足名额。"""
     ranked = list(ranked_codes)
     in_ranked = set(ranked)
     pool = []
@@ -353,37 +352,39 @@ def _max_hold_cap(universe_mode):
 
 def _detect_regime(context):
     try:
-        hist = get_history(260, '1d', 'close', ['000300.SS'])
-        prices = hist['000300.SS'].dropna().values
+        price_df = history(260, '1d', 'close', [BENCHMARK_CODE], df=True)
+        if price_df is None or BENCHMARK_CODE not in price_df.columns:
+            log.warning('_detect_regime: 无沪深300行情，保持当前状态')
+            return
+        prices = price_df[BENCHMARK_CODE].dropna().values
     except Exception as exc:
-        log.warning('_detect_regime get_history 失败: %s，保持当前状态' % str(exc))
+        log.warning('_detect_regime history 失败: %s，保持当前状态' % str(exc))
         return
 
-    context.regime = _calc_regime(prices)
+    g.regime = _calc_regime(prices)
     ratio_map = {
-        'BULL':    context.BULL_RATIO,
-        'NEUTRAL': context.NEUTRAL_RATIO,
-        'BEAR':    context.BEAR_RATIO,
+        'BULL':    g.BULL_RATIO,
+        'NEUTRAL': g.NEUTRAL_RATIO,
+        'BEAR':    g.BEAR_RATIO,
     }
-    context.invested_ratio = ratio_map[context.regime]
-    log.info('大盘状态: %s | 投入比例: %.0f%%' % (
-        context.regime, context.invested_ratio * 100))
+    g.invested_ratio = ratio_map[g.regime]
+    log.info('大盘状态: %s | 投入比例: %.0f%%' % (g.regime, g.invested_ratio * 100))
 
 
 def _refresh_pool(context):
-    base_etfs = list(_etf_list_for_mode(context.UNIVERSE_MODE))
-    bear_um = getattr(context, 'BEAR_UNIVERSE_MODE', 'SAME')
-    bear_def = context.regime == 'BEAR' and bear_um == 'ETF_DEFENSIVE'
+    base_etfs = list(_etf_list_for_mode(g.UNIVERSE_MODE))
+    bear_um = getattr(g, 'BEAR_UNIVERSE_MODE', 'SAME')
+    bear_def = g.regime == 'BEAR' and bear_um == 'ETF_DEFENSIVE'
     stocks = []
 
-    if context.UNIVERSE_MODE == 'WIDE_V2':
+    if g.UNIVERSE_MODE == 'WIDE_V2':
         if bear_def:
             etfs = list(DEFENSIVE_ETF_POOL)
             stocks = []
         else:
             etfs = base_etfs
             stocks = list(set(
-                get_index_stocks('000300.SS') + get_index_stocks('000905.SS')
+                get_index_stocks('000300.XSHG') + get_index_stocks('000905.XSHG')
             ))
     elif bear_def:
         etfs = [e for e in base_etfs if e in _DEFENSIVE_SET]
@@ -400,12 +401,10 @@ def _refresh_pool(context):
         log.warning('候选池为空，保留原池')
         return
 
-    st_map   = get_stock_status(all_cands, 'ST')
-    halt_map = get_stock_status(all_cands, 'HALT')
+    current_data = get_current_data()
     stocks = [s for s in stocks
-              if not st_map.get(s, False) and not halt_map.get(s, False)]
-    etfs = [e for e in etfs   # noqa: redefined
-            if not st_map.get(e, False) and not halt_map.get(e, False)]
+              if not current_data[s].paused and not current_data[s].is_st]
+    etfs = [e for e in etfs if not current_data[e].paused]
 
     if not stocks and not etfs:
         log.warning('ST/停牌过滤后候选池为空，保留原池')
@@ -414,15 +413,18 @@ def _refresh_pool(context):
     fund_df = None
     if stocks:
         try:
-            raw = get_fundamentals(stocks, 'valuation', ['pe_ttm', 'total_value', 'roe'])
+            q = query(
+                valuation.code,
+                valuation.pe_ratio,
+                valuation.market_cap,
+                indicator.roe,
+            ).filter(valuation.code.in_(stocks))
+            raw = get_fundamentals(q)
             if raw is not None and len(raw) > 0:
-                if 'code' not in raw.columns and raw.index.name == 'code':
-                    raw = raw.reset_index()
-                raw = raw.dropna(subset=['pe_ttm', 'total_value'])
-                raw = raw[(raw['pe_ttm'] > 0) & (raw['pe_ttm'] < 120)]
-                raw = raw[raw['total_value'] >= 3e9]
-                if 'code' in raw.columns:
-                    stocks = [s for s in stocks if s in raw['code'].values]
+                raw = raw.dropna(subset=['pe_ratio', 'market_cap'])
+                raw = raw[(raw['pe_ratio'] > 0) & (raw['pe_ratio'] < 120)]
+                raw = raw[raw['market_cap'] >= 30]
+                stocks = [s for s in stocks if s in raw['code'].values]
                 fund_df = raw
         except Exception as exc:
             log.warning('get_fundamentals 失败: %s，跳过基本面过滤' % str(exc))
@@ -432,37 +434,37 @@ def _refresh_pool(context):
         log.warning('有效候选池为空，保留原池')
         return
 
-    cap = _max_hold_cap(context.UNIVERSE_MODE)
-    max_hold = min(int(context.MAX_HOLD), cap)
+    cap = _max_hold_cap(g.UNIVERSE_MODE)
+    max_hold = min(int(g.MAX_HOLD), cap)
 
     vol_dict = {}
     try:
-        hist = get_history(26, '1d', 'close', all_active)
-        if hist is not None and len(hist) > 0:
+        price_df = history(26, '1d', 'close', all_active, df=True)
+        if price_df is not None and len(price_df) > 0:
             for code in all_active:
-                if code not in hist.columns:
+                if code not in price_df.columns:
                     continue
-                prices = hist[code].dropna().values
+                prices = price_df[code].dropna().values
                 v = _calc_vol_from_prices(prices)
                 if v is not None:
                     vol_dict[code] = v
     except Exception as exc:
-        log.warning('get_history(vol) 失败: %s' % str(exc))
+        log.warning('history(vol) 失败: %s' % str(exc))
 
     if not vol_dict:
         log.warning('波动率计算全部失败，保留原池')
         return
 
-    ranked_pairs = _score_universe(vol_dict, fund_df, etfs, context.VOL_WEIGHT)
+    ranked_pairs = _score_universe(vol_dict, fund_df, etfs, g.VOL_WEIGHT)
     ranked_codes = [code for code, _ in ranked_pairs]
 
-    if context.UNIVERSE_MODE == 'WIDE_V2':
+    if g.UNIVERSE_MODE == 'WIDE_V2':
         new_pool = [code for code, _ in ranked_pairs[:max_hold]]
-    elif context.UNIVERSE_MODE == 'ANCHOR_SATELLITE':
+    elif g.UNIVERSE_MODE == 'ANCHOR_SATELLITE':
         new_pool = build_grid_pool_anchor_first(
             ranked_codes, ANCHOR_ETF_UNIVERSE, max_hold,
         )
-        min_a = int(getattr(context, 'MIN_ANCHORS_IN_POOL', 1))
+        min_a = int(getattr(g, 'MIN_ANCHORS_IN_POOL', 1))
         tradable_anchor = [c for c in ANCHOR_ETF_UNIVERSE if c in vol_dict]
         n_anchor_in = sum(1 for c in new_pool if c in _ANCHOR_SET)
         if len(tradable_anchor) >= min_a and n_anchor_in < min_a:
@@ -473,65 +475,65 @@ def _refresh_pool(context):
     else:
         new_pool = [code for code, _ in ranked_pairs[:max_hold]]
 
-    old_set = set(context.pool)
+    old_set = set(g.pool)
     new_set = set(new_pool)
     for code in old_set - new_set:
         order_target(code, 0)
         log.info('调出网格池: %s' % code)
 
-    context.pool = new_pool
+    g.pool = new_pool
     log.info('网格池更新 %d只: %s%s' % (
-        len(context.pool),
-        ','.join(context.pool[:5]),
-        '...' if len(context.pool) > 5 else '',
+        len(g.pool),
+        ','.join(g.pool[:5]),
+        '...' if len(g.pool) > 5 else '',
     ))
 
 
 def _execute_grid(context):
-    if not context.pool:
+    if not g.pool:
         return
 
-    N = len(context.pool)
+    N = len(g.pool)
 
-    bear_grid = getattr(context, 'BEAR_GRID_MODE', 'NORMAL')
+    bear_grid = getattr(g, 'BEAR_GRID_MODE', 'NORMAL')
     eff_layer = _effective_max_layer_bear(
-        context.regime,
+        g.regime,
         bear_grid,
-        context.GRID_MAX_LAYER,
-        getattr(context, 'BEAR_GRID_MAX_LAYER_CAP', 0),
+        g.GRID_MAX_LAYER,
+        getattr(g, 'BEAR_GRID_MAX_LAYER_CAP', 0),
     )
     layer_for_cap = (
         eff_layer
-        if (context.regime == 'BEAR' and bear_grid == 'CAP_LAYER')
-        else context.GRID_MAX_LAYER
+        if (g.regime == 'BEAR' and bear_grid == 'CAP_LAYER')
+        else g.GRID_MAX_LAYER
     )
 
     try:
-        hist = get_history(31, '1d', 'close', context.pool)
+        price_df = history(31, '1d', 'close', g.pool, df=True)
     except Exception as exc:
-        log.warning('_execute_grid get_history 失败: %s' % str(exc))
+        log.warning('_execute_grid history 失败: %s' % str(exc))
         return
 
     layers = []
     active = []
 
-    for code in context.pool:
-        if hist is None or code not in hist.columns:
+    for code in g.pool:
+        if price_df is None or code not in price_df.columns:
             continue
-        prices = hist[code].dropna().values
+        prices = price_df[code].dropna().values
         if len(prices) < 22:
             continue
         price = float(prices[-1])
         if not (np.isfinite(price) and price > 0):
             continue
-        ma20  = float(prices[-20:].mean())
-        vol   = _calc_vol_from_prices(prices)
+        ma20 = float(prices[-20:].mean())
+        vol = _calc_vol_from_prices(prices)
         if vol is None:
             continue
         step = float(np.clip(
-            vol * context.GRID_STEP_VOL_FACTOR,
-            context.GRID_STEP_MIN,
-            context.GRID_STEP_MAX,
+            vol * g.GRID_STEP_VOL_FACTOR,
+            g.GRID_STEP_MIN,
+            g.GRID_STEP_MAX,
         ))
         layer = _calc_layer(price, ma20, step, eff_layer)
         layers.append(layer)
@@ -540,22 +542,33 @@ def _execute_grid(context):
     if not active:
         return
 
-    raw_w  = [max((1.0 / N) * (1.0 + context.LAYER_FRACTION * float(lyr)), 1e-9)
-              for lyr in layers]
+    raw_w = [max((1.0 / N) * (1.0 + g.LAYER_FRACTION * float(lyr)), 1e-9)
+             for lyr in layers]
     norm_w = _normalize_weights(raw_w)
 
-    max_w = (1.0 / N) * (1.0 + context.LAYER_FRACTION * layer_for_cap)
+    max_w = (1.0 / N) * (1.0 + g.LAYER_FRACTION * layer_for_cap)
     norm_w = _apply_weight_cap(norm_w, max_w)
 
-    tv  = context.portfolio.portfolio_value
-    cap = tv * context.invested_ratio
+    tv = context.portfolio.total_value
+    cap = tv * g.invested_ratio
     cap = min(cap, TARGET_CAPITAL)
 
     target_by_code = {code: cap * w for code, w in zip(active, norm_w)}
 
-    if context.regime == 'BEAR' and bear_grid == 'NO_NET_ADD':
-        prev = getattr(context, '_prev_eod_position_value', {}) or {}
+    if g.regime == 'BEAR' and bear_grid == 'NO_NET_ADD':
+        prev = getattr(g, '_prev_eod_position_value', {}) or {}
         target_by_code = _apply_no_net_add_targets(prev, target_by_code)
 
-    for code, val in target_by_code.items():
-        order_target_value(code, val)
+    for code, target_val in target_by_code.items():
+        if target_val < 1e-6:
+            continue
+        px_series = price_df[code].dropna()
+        if len(px_series) == 0:
+            continue
+        last_px = float(px_series.iloc[-1])
+        if not (np.isfinite(last_px) and last_px > 0):
+            continue
+        if target_val < last_px * 100:
+            log.debug('跳过 %s: 目标金额 %.0f < 1手金额 %.0f' % (code, target_val, last_px * 100))
+            continue
+        order_target_value(code, target_val)

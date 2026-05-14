@@ -19,8 +19,9 @@
 | **v1.0** | ✅ 已完成 | Holdout 年化 +60.51%，夏普 2.20，最大回撤 -16.28%；全长见 `03-optimization-summary` §5 | [查看 →](grid_multi_asset/v1.0/) |
 | **v2.0** | ✅ WF/Holdout 已完成 | Trial 29；与 v1 相同 Holdout 区间：**+28.94%** 年化 / 夏普 **1.43** / 回撤 **-12.35%**（risk-off 结构，收益低于 v1 同段但回撤更紧） | [索引 →](grid_multi_asset/v2.0/README.md) · [报告 →](grid_multi_asset/v2.0/) |
 | **v3.0** | ✅ WF 已完成 | Trial **357**；Holdout 年化约 **+45.5%**（详 §5）；全长跑赢指数仍弱——见 [报告 §5](grid_multi_asset/v3.0/03-optimization-summary.md) | [设计 →](grid_multi_asset/v3.0/01-design.md) · [总结 →](grid_multi_asset/v3.0/03-optimization-summary.md) |
+| **v4.0** | ✅ WF + 门禁 + 报告已完成 | Trial **185**；**三重门禁未通过**（全长跑输 300 仍显著）— 详见 [03-optimization-summary §五](./grid_multi_asset/v4.0/03-optimization-summary.md) | [设计 →](grid_multi_asset/v4.0/01-design.md) · [总结 →](grid_multi_asset/v4.0/03-optimization-summary.md) |
 
-**代码对照：** v1 → `strategies/grid_multi_asset/`；v2 → `strategies/grid_multi_asset_v2/`（沪深300 regime 三档总仓 + 单标的水注权重上限）；v3（规划）→ `strategies/grid_multi_asset_v3/`。
+**代码对照：** v1 → `strategies/grid_multi_asset/`；v2 → `strategies/grid_multi_asset_v2/`；v3 → `strategies/grid_multi_asset_v3/`；**v4** → `strategies/grid_multi_asset_v4/`（窄池 + 周频投入比例 + 分段门禁）。
 
 ---
 
@@ -44,5 +45,6 @@ my_docs/
 | `v1.0` | grid_multi_asset 第一版：**Walk-Forward 调参与 Holdout** 已定稿；代码在 `grid_multi_asset/` |
 | `v2.0` | grid_multi_asset 第二版：**regime + 总仓比例 + water-filling 上限**，WF/Holdout 已定稿（Trial 29）；代码在 `grid_multi_asset_v2/` |
 | `v3.0` | 第三版：**M1/M2（防御池 + 熊市网格语义）**，WF 完成后打标；代码在 `grid_multi_asset_v3/` |
+| `v4.0` | 第四版：**窄 ETF + 周频 regime + 三重门禁**；WF/报告完成后打标；代码在 `grid_multi_asset_v4/` |
 
 若在合并进 `main` 的里程碑提交上还未打语义化标签，可在该仓库根目录按需执行：`git tag -a <tag> <commit>`（与已有的其他版本标签并存即可）。

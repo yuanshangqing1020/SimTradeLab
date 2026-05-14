@@ -3,10 +3,10 @@
 """
 多标的自适应网格策略 v5 — 直接回测版
 
-逻辑与 template.py 一致；最优参数由 Walk-Forward 与三重门禁流程写入后用于验证。
-初始资金建议 50 万。
+与本目录 `template.py` 逻辑一致；默认 `initialize` 与
+`optimization/results/best_params_20260514_122926.json`（Trial 190）对齐。
+全长复核：`src/simtradelab/backtest/run_backtest.py` 中 `strategy_name='grid_multi_asset_v5'`。
 """
-
 import numpy as np
 
 # 全市场 ETF 母本（WIDE_V2 与 v2 一致）
@@ -94,28 +94,28 @@ def initialize(context):
     set_benchmark('000300.SS')
     set_slippage(slippage=0.00246)
 
-    # ── WF 最优（Trial 185，见 results/best_params_20260513_120438.json）── #
-    context.MAX_HOLD             = 6
+    # ── 归档参数（Trial 190，见 results/best_params_20260514_122926.json）── #
+    context.MAX_HOLD             = 3
     context.GRID_STEP_VOL_FACTOR = 0.6
-    context.GRID_STEP_MIN        = 0.02
+    context.GRID_STEP_MIN        = 0.01
     context.GRID_STEP_MAX        = 0.05
     context.GRID_MAX_LAYER       = 2
     context.LAYER_FRACTION       = 0.08
-    context.VOL_WEIGHT           = 0.80
-    context.REBALANCE_FREQ       = 20
+    context.VOL_WEIGHT           = 0.5
+    context.REBALANCE_FREQ       = 5
 
-    context.BULL_RATIO    = 0.70
-    context.NEUTRAL_RATIO = 0.50
+    context.BULL_RATIO    = 0.7
+    context.NEUTRAL_RATIO = 0.5
     context.BEAR_RATIO    = 0.45
 
     # ANCHOR_SATELLITE | WIDE_V2 | NARROW_ETF（窄池 6 只，与 v4 对齐仅作对照）
-    context.UNIVERSE_MODE = 'ANCHOR_SATELLITE'
-    context.MIN_ANCHORS_IN_POOL = 1
+    context.UNIVERSE_MODE = 'WIDE_V2'
+    context.MIN_ANCHORS_IN_POOL = 2
     # WEEKLY | ON_REBALANCE_ONLY
     context.REGIME_REFRESH = 'WEEKLY'
 
-    context.BEAR_UNIVERSE_MODE = 'SAME'          # SAME | ETF_DEFENSIVE
-    context.BEAR_GRID_MODE = 'NORMAL'             # NORMAL | NO_NET_ADD | CAP_LAYER
+    context.BEAR_UNIVERSE_MODE = 'SAME'  # SAME | ETF_DEFENSIVE
+    context.BEAR_GRID_MODE = 'CAP_LAYER'  # NORMAL | NO_NET_ADD | CAP_LAYER
     context.BEAR_GRID_MAX_LAYER_CAP = 0
 
     context.pool           = []

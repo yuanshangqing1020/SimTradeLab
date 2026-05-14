@@ -66,11 +66,11 @@ def extract_metrics(report: dict[str, Any]) -> dict[str, float]:
     return {k: float(report.get(k, 0.0)) for k in keys}
 
 
-def check_gates(
+def check_gates_i_ii_only(
     m_full: dict[str, float],
-    m_recent: dict[str, float],
     thr: GateThresholds,
 ) -> tuple[bool, list[str]]:
+    """仅 I（FULL 回撤）与 II（FULL 超额、IR）。"""
     failures: list[str] = []
     mdd_f = m_full.get('max_drawdown', -1.0)
     if mdd_f < thr.full_max_drawdown:
@@ -87,6 +87,15 @@ def check_gates(
         failures.append(
             'II: FULL information_ratio {:.4f} < {:.4f}'.format(ir_f, thr.full_information_ratio),
         )
+    return (len(failures) == 0, failures)
+
+
+def check_gates_iii_only(
+    m_recent: dict[str, float],
+    thr: GateThresholds,
+) -> tuple[bool, list[str]]:
+    """仅 III（RECENT 年化、回撤、夏普）。"""
+    failures: list[str] = []
     ar_r = m_recent.get('annual_return', 0.0)
     if ar_r < thr.recent_annual_return:
         failures.append(
@@ -105,6 +114,40 @@ def check_gates(
     return (len(failures) == 0, failures)
 
 
+def check_recent_sharpe_mdd_only(
+    m_recent: dict[str, float],
+    thr: GateThresholds,
+) -> tuple[bool, list[str]]:
+    """RECENT 粗筛：仅夏普与最大回撤（阈值同 III）。"""
+    failures: list[str] = []
+    mdd_r = m_recent.get('max_drawdown', -1.0)
+    if mdd_r < thr.recent_max_drawdown:
+        failures.append(
+            'III(coarse): RECENT max_drawdown {:.4f} < {:.4f}'.format(
+                mdd_r, thr.recent_max_drawdown,
+            ),
+        )
+    sh_r = m_recent.get('sharpe_ratio', 0.0)
+    if sh_r < thr.recent_sharpe:
+        failures.append(
+            'III(coarse): RECENT sharpe_ratio {:.4f} < {:.4f}'.format(
+                sh_r, thr.recent_sharpe,
+            ),
+        )
+    return (len(failures) == 0, failures)
+
+
+def check_gates(
+    m_full: dict[str, float],
+    m_recent: dict[str, float],
+    thr: GateThresholds,
+) -> tuple[bool, list[str]]:
+    ok_i_ii, f12 = check_gates_i_ii_only(m_full, thr)
+    ok_iii, f3 = check_gates_iii_only(m_recent, thr)
+    failures = (f12 if not ok_i_ii else []) + (f3 if not ok_iii else [])
+    return (ok_i_ii and ok_iii, failures)
+
+
 def run_segment(
     runner: BacktestRunner,
     start: str,
@@ -121,6 +164,19 @@ def run_segment(
         enable_logging=False,
     )
     return runner.run(config=cfg)
+
+
+def run_metrics_for_params_window(
+    params: dict[str, Any],
+    custom_mapping: dict[str, str],
+    start: str,
+    end: str,
+    runner: Optional[BacktestRunner] = None,
+) -> dict[str, float]:
+    """写入注入策略后跑单窗回测并返回指标字典（会覆盖 gate_injected_backtest.py）。"""
+    write_injected_strategy(params, custom_mapping)
+    rep = run_segment(runner or BacktestRunner(), start, end)
+    return extract_metrics(rep)
 
 
 def run_triple_gates(

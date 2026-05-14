@@ -117,8 +117,8 @@ def initialize(context):
     # WEEKLY | ON_REBALANCE_ONLY
     context.REGIME_REFRESH = 'WEEKLY'
 
-    context.BEAR_UNIVERSE_MODE = 'SAME'  # SAME | ETF_DEFENSIVE
-    context.BEAR_GRID_MODE = 'CAP_LAYER'  # NORMAL | NO_NET_ADD | CAP_LAYER
+    context.BEAR_UNIVERSE_MODE = 'SAME'# SAME | ETF_DEFENSIVE
+    context.BEAR_GRID_MODE = 'CAP_LAYER'# NORMAL | NO_NET_ADD | CAP_LAYER
     context.BEAR_GRID_MAX_LAYER_CAP = 0
 
     context.pool           = []
