@@ -6,7 +6,7 @@
 规格：my_docs/core_grid_hybrid/v1.0/01-design.md
 实施：my_docs/core_grid_hybrid/v1.0/02-plan.md
 
-网格基准：固定锚定价 ref（方案 A）。日线收盘触发，每 bar 最多一笔网格。
+网格基准：固定 ref 几何卖档（方案 A）+ 网格卖后回补：ref 买档 或「上一网格卖价」回撤 buy_step。
 """
 import math
 
@@ -79,18 +79,25 @@ def pick_grid_action_close(
     last_pair_k,
     max_grid_level,
     last_open_sell_k,
+    last_grid_sell_price,
 ):
     """
-    在单根 K 线收盘价下，按 02-plan §3～§6 至多产生一笔网格意向：('buy', k) / ('sell', k) / None。
-    buy_step：非防御 = grid_step；防御 = defensive_buy_step。
-    last_open_sell_k：最近一次「开仓式」网格卖单所用档位；中性状态下新卖单仅允许 k > last_open_sell_k，
-    避免趋势中反复在同一档 k=1 卖出。
+    至多一笔：('buy', k) / ('sell', k) / None。
+    last_open_sell_k：中性新卖单从 k>floor 起算。
+    last_grid_sell_price：最近一笔网格卖出的收盘价；卖后等回补时除 ref 几何买档外，
+    还允许 close <= last_grid_sell_price*(1-buy_step)（相对卖价回撤，否则牛市常年无买单）。
     """
     hi = max_grid_level if max_grid_level is not None else 50
     floor_s = last_open_sell_k if last_open_sell_k is not None else 0
 
     if round_active and last_pair_side == 'sell' and last_pair_k is not None:
-        if close <= grid_buy_price(ref, last_pair_k, buy_step):
+        hit_ref = close <= grid_buy_price(ref, last_pair_k, buy_step)
+        hit_trail = (
+            last_grid_sell_price is not None
+            and last_grid_sell_price > 0
+            and close <= last_grid_sell_price * (1.0 - buy_step)
+        )
+        if hit_ref or hit_trail:
             return ('buy', last_pair_k)
         return None
 
@@ -111,12 +118,20 @@ def pick_grid_action_close(
             min_k_buy = k
             break
 
+    trail_buy = (
+        last_grid_sell_price is not None
+        and last_grid_sell_price > 0
+        and close <= last_grid_sell_price * (1.0 - buy_step)
+    )
+
     if min_k_sell is not None and min_k_buy is not None:
         return ('sell', min_k_sell)
     if min_k_sell is not None:
         return ('sell', min_k_sell)
     if min_k_buy is not None:
         return ('buy', min_k_buy)
+    if trail_buy:
+        return ('buy', 1)
     return None
 
 
@@ -135,7 +150,7 @@ def initialize(context):
     context.grid_lot = 1000
     context.defensive_trigger_drawdown = 0.15
     context.defensive_buy_step = 0.05
-    context.take_profit_ret = 0.20
+    context.take_profit_ret = 0.35
     context.max_grid_level = None
 
     context.ref = None
@@ -150,6 +165,7 @@ def initialize(context):
     context.grid_suspended = False
     context.rolling_peak_close = None
     context.last_open_sell_k = 0
+    context.last_grid_sell_price = None
 
     log.info('core_grid_hybrid_v1 初始化 symbol=%s', context.symbol)
 
@@ -277,6 +293,7 @@ def handle_data(context, data):
         last_pair_k=context.last_pair_k,
         max_grid_level=context.max_grid_level,
         last_open_sell_k=context.last_open_sell_k,
+        last_grid_sell_price=context.last_grid_sell_price,
     )
 
     if action is None:
@@ -313,8 +330,10 @@ def handle_data(context, data):
             context.round_active = False
             context.last_pair_side = None
             context.last_pair_k = None
+            context.last_grid_sell_price = None
             log.info('GRID sell k=%d qty=%d close=%.4f -> GRID_SUSPENDED_UP（清零在途配对）', k, cap, close)
         else:
+            context.last_grid_sell_price = close
             log.info('GRID sell k=%d qty=%d close=%.4f round_active=%s', k, cap, close, context.round_active)
         _try_take_profit(context, sym)
         return
@@ -336,6 +355,7 @@ def handle_data(context, data):
 
     context.grid_shares += lot
     context.round_active = not context.round_active
+    context.last_grid_sell_price = None
     if context.round_active:
         context.last_pair_side = 'buy'
         context.last_pair_k = k

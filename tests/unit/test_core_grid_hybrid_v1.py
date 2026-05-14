@@ -43,6 +43,9 @@ def test_geometric_prices_k1_k2() -> None:
     assert abs(grid_sell_price(ref, 1, step) - 10.3) < 1e-9
     assert abs(grid_buy_price(ref, 1, step) - (10.0 * 0.97)) < 1e-9
     assert abs(grid_sell_price(ref, 2, step) - (10.0 * 1.03 * 1.03)) < 1e-9
+
+
+def test_defensive_buy_prices_use_wider_step() -> None:
     ref = 100.0
     normal = grid_buy_price(ref, 1, 0.03)
     wide = grid_buy_price(ref, 1, 0.05)
@@ -65,8 +68,30 @@ def test_pairing_after_sell_only_buy_at_P_buy_k() -> None:
         last_pair_k=1,
         max_grid_level=5,
         last_open_sell_k=0,
+        last_grid_sell_price=None,
     )
     assert a is None
+
+
+def test_pairing_buy_via_trailing_from_last_sell() -> None:
+    """ref 买档太远时，用 last_grid_sell_price 的回撤触发回补。"""
+    ref = 3.0
+    step = 0.03
+    lp = 4.0
+    close = lp * (1.0 - step) - 0.001
+    a = pick_grid_action_close(
+        close=close,
+        ref=ref,
+        grid_step=step,
+        buy_step=step,
+        round_active=True,
+        last_pair_side='sell',
+        last_pair_k=1,
+        max_grid_level=5,
+        last_open_sell_k=1,
+        last_grid_sell_price=lp,
+    )
+    assert a == ('buy', 1)
 
 
 def test_peak_drawdown_triggers_defensive() -> None:
@@ -90,6 +115,7 @@ def test_prefer_sell_when_both_eligible() -> None:
         last_pair_k=None,
         max_grid_level=5,
         last_open_sell_k=0,
+        last_grid_sell_price=None,
     )
     assert a == ('sell', 1)
 
@@ -108,6 +134,7 @@ def test_pick_at_most_one_action_implicit() -> None:
             last_pair_k=None,
             max_grid_level=10,
             last_open_sell_k=0,
+            last_grid_sell_price=None,
         )
         assert a is None or (isinstance(a, tuple) and len(a) == 2)
 
@@ -128,5 +155,6 @@ def test_neutral_sell_respects_last_open_sell_k() -> None:
         last_pair_k=None,
         max_grid_level=5,
         last_open_sell_k=1,
+        last_grid_sell_price=None,
     )
     assert a is None
