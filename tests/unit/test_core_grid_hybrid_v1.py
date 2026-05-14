@@ -16,6 +16,25 @@ grid_buy_price = _mod.grid_buy_price
 grid_sell_price = _mod.grid_sell_price
 pick_grid_action_close = _mod.pick_grid_action_close
 should_enter_defensive = _mod.should_enter_defensive
+should_cancel_pair_after_sell_close = _mod.should_cancel_pair_after_sell_close
+should_cancel_pair_after_buy_close = _mod.should_cancel_pair_after_buy_close
+
+
+def test_cancel_pair_after_sell_when_next_sell_level_reached() -> None:
+    ref = 10.0
+    step = 0.03
+    assert grid_sell_price(ref, 2, step) > grid_sell_price(ref, 1, step)
+    assert should_cancel_pair_after_sell_close(grid_sell_price(ref, 2, step), ref, step, 1, 10) is True
+    assert should_cancel_pair_after_sell_close(grid_sell_price(ref, 2, step) - 0.01, ref, step, 1, 10) is False
+
+
+def test_cancel_pair_after_buy_when_next_buy_level_reached() -> None:
+    ref = 10.0
+    step = 0.03
+    # 买在 k=1 后等反弹卖；若跌破 k=2 买档则取消
+    p2 = grid_buy_price(ref, 2, step)
+    assert should_cancel_pair_after_buy_close(p2, ref, step, 1, 10) is True
+    assert should_cancel_pair_after_buy_close(p2 + 0.02, ref, step, 1, 10) is False
 
 
 def test_geometric_prices_k1_k2() -> None:
@@ -24,9 +43,6 @@ def test_geometric_prices_k1_k2() -> None:
     assert abs(grid_sell_price(ref, 1, step) - 10.3) < 1e-9
     assert abs(grid_buy_price(ref, 1, step) - (10.0 * 0.97)) < 1e-9
     assert abs(grid_sell_price(ref, 2, step) - (10.0 * 1.03 * 1.03)) < 1e-9
-
-
-def test_defensive_buy_prices_use_wider_step() -> None:
     ref = 100.0
     normal = grid_buy_price(ref, 1, 0.03)
     wide = grid_buy_price(ref, 1, 0.05)
@@ -48,6 +64,7 @@ def test_pairing_after_sell_only_buy_at_P_buy_k() -> None:
         last_pair_side='sell',
         last_pair_k=1,
         max_grid_level=5,
+        last_open_sell_k=0,
     )
     assert a is None
 
@@ -72,6 +89,7 @@ def test_prefer_sell_when_both_eligible() -> None:
         last_pair_side=None,
         last_pair_k=None,
         max_grid_level=5,
+        last_open_sell_k=0,
     )
     assert a == ('sell', 1)
 
@@ -89,5 +107,26 @@ def test_pick_at_most_one_action_implicit() -> None:
             last_pair_side=None,
             last_pair_k=None,
             max_grid_level=10,
+            last_open_sell_k=0,
         )
         assert a is None or (isinstance(a, tuple) and len(a) == 2)
+
+
+def test_neutral_sell_respects_last_open_sell_k() -> None:
+    ref = 10.0
+    step = 0.03
+    # 介于 P_sell_1 与 P_sell_2 之间：last_open_sell_k=1 时不应再给出 k=1 卖单
+    close = 10.5
+    assert grid_sell_price(ref, 1, step) < close < grid_sell_price(ref, 2, step)
+    a = pick_grid_action_close(
+        close=close,
+        ref=ref,
+        grid_step=step,
+        buy_step=step,
+        round_active=False,
+        last_pair_side=None,
+        last_pair_k=None,
+        max_grid_level=5,
+        last_open_sell_k=1,
+    )
+    assert a is None

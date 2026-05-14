@@ -47,6 +47,28 @@ def should_enter_defensive(rolling_peak_close, close, threshold):
     return (rolling_peak_close - close) / rolling_peak_close >= threshold
 
 
+def should_cancel_pair_after_sell_close(close, ref, grid_step, last_pair_k, max_grid_level):
+    """卖后等回补时：若收盘已上破「下一档」卖价，解除回补义务（避免单边上涨永久锁死网格）。"""
+    if last_pair_k is None:
+        return False
+    hi = max_grid_level if max_grid_level is not None else 50
+    nk = last_pair_k + 1
+    if nk > hi:
+        return False
+    return close >= grid_sell_price(ref, nk, grid_step)
+
+
+def should_cancel_pair_after_buy_close(close, ref, buy_step, last_pair_k, max_grid_level):
+    """买后等卖出时：若收盘已跌破「下一档」买价，解除卖出义务（避免单边下跌永久锁死）。"""
+    if last_pair_k is None:
+        return False
+    hi = max_grid_level if max_grid_level is not None else 50
+    nk = last_pair_k + 1
+    if nk > hi:
+        return False
+    return close <= grid_buy_price(ref, nk, buy_step)
+
+
 def pick_grid_action_close(
     close,
     ref,
@@ -56,12 +78,16 @@ def pick_grid_action_close(
     last_pair_side,
     last_pair_k,
     max_grid_level,
+    last_open_sell_k,
 ):
     """
     在单根 K 线收盘价下，按 02-plan §3～§6 至多产生一笔网格意向：('buy', k) / ('sell', k) / None。
     buy_step：非防御 = grid_step；防御 = defensive_buy_step。
+    last_open_sell_k：最近一次「开仓式」网格卖单所用档位；中性状态下新卖单仅允许 k > last_open_sell_k，
+    避免趋势中反复在同一档 k=1 卖出。
     """
     hi = max_grid_level if max_grid_level is not None else 50
+    floor_s = last_open_sell_k if last_open_sell_k is not None else 0
 
     if round_active and last_pair_side == 'sell' and last_pair_k is not None:
         if close <= grid_buy_price(ref, last_pair_k, buy_step):
@@ -74,7 +100,7 @@ def pick_grid_action_close(
         return None
 
     min_k_sell = None
-    for k in range(1, hi + 1):
+    for k in range(floor_s + 1, hi + 1):
         if close >= grid_sell_price(ref, k, grid_step):
             min_k_sell = k
             break
@@ -123,12 +149,25 @@ def initialize(context):
     context.done = False
     context.grid_suspended = False
     context.rolling_peak_close = None
+    context.last_open_sell_k = 0
 
     log.info('core_grid_hybrid_v1 初始化 symbol=%s', context.symbol)
 
 
-def _floor_lot(n: float, lot: int = 100) -> int:
+def _floor_lot(n, lot=100):
     return int(math.floor(n / lot)) * lot
+
+
+def _try_take_profit(context, sym):
+    """整体止盈：达到 take_profit_ret 则清仓；若已无仓则标记 done。"""
+    ret_end = context.portfolio.returns
+    if ret_end < context.take_profit_ret:
+        return
+    log.info('EXIT_ALL 触发 ret=%.4f >= %.4f', ret_end, context.take_profit_ret)
+    order_target(sym, 0)
+    pos_after = context.portfolio.positions.get(sym)
+    if pos_after is None or pos_after.amount <= 0:
+        context.done = True
 
 
 def handle_data(context, data):
@@ -182,19 +221,6 @@ def handle_data(context, data):
     if context.rolling_peak_close is not None:
         context.rolling_peak_close = max(context.rolling_peak_close, close)
 
-    # 整体止盈（用组合总收益率 = 总资产相对初始资金）
-    ret = context.portfolio.returns
-    if ret >= context.take_profit_ret:
-        log.info('EXIT_ALL 触发 ret=%.4f >= %.4f', ret, context.take_profit_ret)
-        order_target(sym, 0)
-        pos_after = context.portfolio.positions.get(sym)
-        if pos_after is None or pos_after.amount <= 0:
-            context.done = True
-        return
-
-    if context.grid_suspended:
-        return
-
     if not context.defensive and context.rolling_peak_close is not None:
         if should_enter_defensive(
             context.rolling_peak_close,
@@ -208,6 +234,39 @@ def handle_data(context, data):
     if context.ref is None:
         return
 
+    # 解除 stale 配对（不比 02-plan 冲突：属固定锚定下「趋势踏空」处理，否则长年无网格）
+    if context.round_active and context.last_pair_side == 'sell' and context.last_pair_k is not None:
+        if should_cancel_pair_after_sell_close(
+            close, context.ref, context.grid_step, context.last_pair_k, context.max_grid_level
+        ):
+            nk = context.last_pair_k + 1
+            log.info(
+                'PAIR_CANCEL 收盘上破下一卖档(k=%d)，解除对 k=%d 的回补等待',
+                nk,
+                context.last_pair_k,
+            )
+            context.last_open_sell_k = context.last_pair_k
+            context.round_active = False
+            context.last_pair_side = None
+            context.last_pair_k = None
+    if context.round_active and context.last_pair_side == 'buy' and context.last_pair_k is not None:
+        if should_cancel_pair_after_buy_close(
+            close, context.ref, buy_step, context.last_pair_k, context.max_grid_level
+        ):
+            nk = context.last_pair_k + 1
+            log.info(
+                'PAIR_CANCEL 收盘跌破下一买档(k=%d)，解除对 k=%d 的反弹卖出等待',
+                nk,
+                context.last_pair_k,
+            )
+            context.round_active = False
+            context.last_pair_side = None
+            context.last_pair_k = None
+
+    if context.grid_suspended:
+        _try_take_profit(context, sym)
+        return
+
     action = pick_grid_action_close(
         close=close,
         ref=context.ref,
@@ -217,9 +276,11 @@ def handle_data(context, data):
         last_pair_side=context.last_pair_side,
         last_pair_k=context.last_pair_k,
         max_grid_level=context.max_grid_level,
+        last_open_sell_k=context.last_open_sell_k,
     )
 
     if action is None:
+        _try_take_profit(context, sym)
         return
 
     side, k = action
@@ -231,34 +292,46 @@ def handle_data(context, data):
         cap = min(context.grid_shares, context.grid_lot, enable, physical)
         cap = _floor_lot(cap)
         if cap < 100:
+            _try_take_profit(context, sym)
             return
         oid = order(sym, -cap)
         if oid is None:
+            _try_take_profit(context, sym)
             return
         context.grid_shares -= cap
         context.round_active = not context.round_active
         if context.round_active:
             context.last_pair_side = 'sell'
             context.last_pair_k = k
+            context.last_open_sell_k = k
         else:
             context.last_pair_side = None
             context.last_pair_k = None
-        log.info('GRID sell k=%d qty=%d close=%.4f round_active=%s', k, cap, close, context.round_active)
+            context.last_open_sell_k = k
         if context.grid_shares == 0:
             context.grid_suspended = True
-            log.info('GRID_SUSPENDED_UP 活仓已空')
+            context.round_active = False
+            context.last_pair_side = None
+            context.last_pair_k = None
+            log.info('GRID sell k=%d qty=%d close=%.4f -> GRID_SUSPENDED_UP（清零在途配对）', k, cap, close)
+        else:
+            log.info('GRID sell k=%d qty=%d close=%.4f round_active=%s', k, cap, close, context.round_active)
+        _try_take_profit(context, sym)
         return
 
     # buy
     lot = _floor_lot(context.grid_lot)
     if lot < 100:
+        _try_take_profit(context, sym)
         return
     cost_upper = lot * close * 1.01
     if context.portfolio.cash < cost_upper:
         log.info('现金不足跳过买入 k=%d', k)
+        _try_take_profit(context, sym)
         return
     oid = order(sym, lot)
     if oid is None:
+        _try_take_profit(context, sym)
         return
 
     context.grid_shares += lot
@@ -269,4 +342,7 @@ def handle_data(context, data):
     else:
         context.last_pair_side = None
         context.last_pair_k = None
+        context.last_open_sell_k = 0
     log.info('GRID buy k=%d qty=%d close=%.4f round_active=%s', k, lot, close, context.round_active)
+
+    _try_take_profit(context, sym)
