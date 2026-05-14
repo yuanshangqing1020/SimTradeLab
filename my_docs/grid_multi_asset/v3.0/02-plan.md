@@ -173,7 +173,7 @@ conda run -n SimTrade python -m pytest tests/unit/test_grid_multi_asset_v2.py te
 
 ## Task 10：顶层文档索引
 
-**Files:** `my_docs/README.md`
+**Files:** `my_docs/grid_multi_asset/README.md`
 
 - [ ] 将 v3.0 行的状态从「设计已定稿」更新为「WF 已完成」等实情（在完成 Task 8 后）。
 

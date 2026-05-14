@@ -180,7 +180,7 @@
 
 ## Task 12：文档索引
 
-**Files:** `my_docs/README.md`
+**Files:** `my_docs/grid_multi_asset/README.md`
 
 - [ ] 增加或更新 v4.0 一行指向 `grid_multi_asset/v4.0/` 与状态（计划中 / WF 完成 / 门禁结论）。
 
