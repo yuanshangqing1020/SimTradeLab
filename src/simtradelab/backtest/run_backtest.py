@@ -30,6 +30,7 @@ if __name__ == '__main__':
     # strategy_name = 'grid_multi_asset_v4'
     # strategy_name = 'grid_multi_asset_v3'
     # strategy_name = 'grid_multi_asset_v2'
+    # strategy_name = 'core_grid_hybrid_v1'  # 见 strategies/core_grid_hybrid_v1/backtest.py
 
     # 全长口径与 my_docs v1/v2/v3 总结 §5.2 对齐（2019-01-01～2026-04-20）
     # 复现 v3 Holdout 时改为 end_date='2026-03-31'（与 optimize_params holdout_period 一致）
