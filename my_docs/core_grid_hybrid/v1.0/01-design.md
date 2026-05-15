@@ -133,12 +133,44 @@
 
 ---
 
-## 9. 修订记录
+## 9. 附录 A：SimTradeLab 当前默认实现（trend_sizing，2026-05）
+
+与 §2～§3 描述的 **v1.0 固定 ref 网格主路径** 并列存在；**`strategies/core_grid_hybrid_v1/backtest.py` 默认 `regime_mode='trend_sizing'`，`handle_data` 仅执行本节逻辑**，不再执行 INITIAL_BUILD + GRID_ACTIVE 日序（网格相关能力以 **纯函数** + **`tests/unit/test_core_grid_hybrid_v1.py`** 保留）。
+
+### 9.1 因子与公式
+
+1. **慢均线 MA**：使用在写入**当日**收盘**之前**的日终收盘序列（避免前视），窗口 `ma_slow_days`；历史不足时用 `min(ma_slow_days, len)`，但至少 **`ma_min_days`** 根后才交易。
+2. **\(z = (C - MA) / MA\)**。若 `z < ts_z_cut` 则目标权重 `w = 0`，否则 `w = clip(ts_w_mid + z * ts_w_slope, ts_w_floor, ts_w_cap)`。
+3. **峰值回撤**：维护收盘序列上的最高价 `ts_peak_close`；若 `(peak - C)/peak > ts_peak_dd_cut`，则 `w = min(w, ts_w_peak_stress)`。
+4. **再平衡**：目标市值 `pv * w`（`pv` = 组合净值）；若 `|w - 当前股票市值/pv| < ts_rebalance_band` 则跳过下单。
+5. **整体止盈**：若 `context.portfolio.returns >= take_profit_ret`（默认 **9.99**，近似不触发）则清仓并标记 `done`。
+
+### 9.2 参数一览（以 `initialize` 为准）
+
+| 参数 | 默认（约） | 含义 |
+|------|------------|------|
+| `symbol` | 510300.SS | 单标的 |
+| `ma_slow_days` | 120 | 慢均线窗口 |
+| `ma_min_days` | 20 | 最短历史长度 |
+| `ts_z_cut` | -0.078 | 低于此 z 则空仓 |
+| `ts_w_floor` / `ts_w_cap` / `ts_w_mid` / `ts_w_slope` | 0.52 / 0.99 / 0.68 / 3.5 | 权重映射 |
+| `ts_rebalance_band` | 0.026 | 再平衡死区 |
+| `ts_peak_dd_cut` | 0.10 | 峰值回撤阈值 |
+| `ts_w_peak_stress` | 0.32 | 峰值压力下权重上限 |
+
+### 9.3 聚宽对照
+
+`510300.SS` → `510300.XSHG`；`strategies_jq/core_grid_hybrid/v1/strategy.py`，说明见 `strategies_jq/core_grid_hybrid/README.md`。
+
+---
+
+## 10. 修订记录
 
 | 日期 | 说明 |
 |------|------|
 | 2026-05-14 | 初稿：目标/非目标、三方案、状态机、目录与测试 |
 | 2026-05-14 | **定稿：选用方案 A**；§2 改为 A 的数学定义与 B/C 降级；§4～§5、§8 同步 |
+| 2026-05-15 | **§9 附录 A**：补充当前仓库默认 **trend_sizing** 与 v1.0 网格设计文档的关系；聚宽路径 |
 
 ---
 

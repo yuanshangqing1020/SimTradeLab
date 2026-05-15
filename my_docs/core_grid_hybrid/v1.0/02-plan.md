@@ -1,5 +1,7 @@
 # 核心仓 + 网格混合策略 v1.0 — 实施计划
 
+> **现状（2026-05）：** SimTradeLab `strategies/core_grid_hybrid_v1/backtest.py` 的 **`handle_data` 默认仅执行 `trend_sizing`**（见 `01-design.md` §9）。下文 Task 以 **v1.0 固定 ref 网格** 为原始交付清单；网格主路径已暂从日线 `handle_data` 移除，相关行为由 **`pick_grid_*` 纯函数 + 单元测试** 覆盖。若恢复网格主路径，可另设 `regime_mode` 并在计划中增补回归任务。
+
 > **For agentic workers:** 按下方 Task 顺序实施；步骤使用 `- [ ]` 勾选跟踪。规格真源见同目录 [`01-design.md`](./01-design.md)。
 
 **Goal：** 新建 `strategies/core_grid_hybrid_v1/backtest.py`（及配套目录），在 SimTradeLab 回测链路内实现 **单标的**、**固定锚定价 `ref`（方案 A）**、**死仓 / 活仓虚拟分账**、**几何网格 + 单档回补配对**、**防御买步长**、**活仓卖光暂停网格**、**整体收益率止盈**；默认 **日线收盘撮合**，**每根 K 线最多一笔网格成交**。

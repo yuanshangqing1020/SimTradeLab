@@ -26,7 +26,7 @@ if __name__ == '__main__':
     # ==================== 回测配置 ====================
 
     # 策略：v5 Trial 190 默认参数见 strategies/grid_multi_asset_v5/backtest.py
-    strategy_name = 'grid_multi_asset_v5'
+    strategy_name = 'core_grid_hybrid_v1'
     # strategy_name = 'grid_multi_asset_v4'
     # strategy_name = 'grid_multi_asset_v3'
     # strategy_name = 'grid_multi_asset_v2'

@@ -139,6 +139,66 @@ def test_pick_at_most_one_action_implicit() -> None:
         assert a is None or (isinstance(a, tuple) and len(a) == 2)
 
 
+def test_suspended_no_neutral_sell_still_trails_buy() -> None:
+    """活仓清零暂停时：禁止中性 min_k_sell 抢占，否则 trail_buy 永远轮不到。"""
+    ref = 3.0
+    step = 0.03
+    last = 3.869
+    close = last * (1.0 - step) - 0.001
+    a_blocked = pick_grid_action_close(
+        close=close,
+        ref=ref,
+        grid_step=step,
+        buy_step=step,
+        round_active=False,
+        last_pair_side=None,
+        last_pair_k=None,
+        max_grid_level=50,
+        last_open_sell_k=0,
+        last_grid_sell_price=last,
+        allow_neutral_sell=True,
+    )
+    assert a_blocked is not None and a_blocked[0] == 'sell'
+    a_trail = pick_grid_action_close(
+        close=close,
+        ref=ref,
+        grid_step=step,
+        buy_step=step,
+        round_active=False,
+        last_pair_side=None,
+        last_pair_k=None,
+        max_grid_level=50,
+        last_open_sell_k=0,
+        last_grid_sell_price=last,
+        allow_neutral_sell=False,
+    )
+    assert a_trail == ('buy', 1)
+
+
+def test_suspend_peak_trail_buy_beyond_last_sell() -> None:
+    """暂停期峰值跟踪：价涨远末笔卖价后，按峰值回撤触发买，而不必跌回末笔卖。"""
+    ref = 3.0
+    step = 0.03
+    peak = 4.5
+    close = peak * (1.0 - step) - 0.001
+    last_sell = 3.869
+    a = pick_grid_action_close(
+        close=close,
+        ref=ref,
+        grid_step=step,
+        buy_step=step,
+        round_active=False,
+        last_pair_side=None,
+        last_pair_k=None,
+        max_grid_level=50,
+        last_open_sell_k=0,
+        last_grid_sell_price=last_sell,
+        allow_neutral_sell=False,
+        suspend_peak_close=peak,
+    )
+    assert a == ('buy', 1)
+
+
 def test_neutral_sell_respects_last_open_sell_k() -> None:
     ref = 10.0
     step = 0.03
