@@ -4,7 +4,7 @@
 **日期：** 2026-05-14  
 **已定决策：** 回测与实现以 **A** 为唯一口径；B/C 仅作 v1.x 扩展备选，不得与 v1.0 混用。  
 **规格真源（规划）：** `strategies/core_grid_hybrid_v1/`（`backtest.py` + `stats/`）  
-**理念来源：** [`core_grid_hybrid_strategy /README.MD`](../../core_grid_hybrid_strategy%20/README.MD)（`my_docs` 内理念说明）  
+**理念来源：** [`00-rationale.md`](./00-rationale.md)（投资逻辑与网格直觉，与工程规格互补）  
 **目录范式参考：** [`my_docs/grid_multi_asset/`](../grid_multi_asset/README.md) 与 [`strategies/grid_multi_asset_v5/`](../../../strategies/grid_multi_asset_v5/)
 
 ---
@@ -109,7 +109,7 @@
 
 与 [`my_docs/core_grid_hybrid/README.md`](../README.md) 一致，摘要如下：
 
-- **文档：** `my_docs/core_grid_hybrid/v1.0/{01-design.md,02-plan.md,03-optimization-summary.md}`  
+- **文档：** `my_docs/core_grid_hybrid/v1.0/{00-rationale.md,01-design.md,02-plan.md,03-optimization-summary.md}`  
 - **代码：** `strategies/core_grid_hybrid_v1/backtest.py`（及可选 `optimization/`、`stats/`）  
 - **入口：** `run_backtest.py` 中 `strategy_name='core_grid_hybrid_v1'`（实现阶段再加）
 
@@ -121,7 +121,7 @@
 |----|------|
 | **单测** | `tests/unit/test_core_grid_hybrid_v1.py`（或项目约定路径）：档位触发、T+1 可卖量、活仓卖光暂停、整体收益率止盈、防御模式步长切换。 |
 | **对比基线** | 同区间 **买入持有（半仓一次性买入与建仓日对齐）** 或全仓 B&H，便于报告相对超额（非门禁）。 |
-| **文档闭环** | 设计（本文）→ 计划（`02-plan.md`）→ 调参总结（`03-optimization-summary.md`） |
+| **文档闭环** | 理念（`00-rationale.md`）→ 设计（本文）→ 计划（`02-plan.md`）→ 调参总结（`03-optimization-summary.md`） |
 
 ---
 
@@ -170,7 +170,7 @@
 |------|------|
 | 2026-05-14 | 初稿：目标/非目标、三方案、状态机、目录与测试 |
 | 2026-05-14 | **定稿：选用方案 A**；§2 改为 A 的数学定义与 B/C 降级；§4～§5、§8 同步 |
-| 2026-05-15 | **§9 附录 A**：补充当前仓库默认 **trend_sizing** 与 v1.0 网格设计文档的关系；聚宽路径 |
+| 2026-05-15 | **§9 附录 A**：当前默认 **trend_sizing** 与聚宽路径；**§6/§7**：`00-rationale.md` 纳入文档清单与闭环；理念来源改为 `00-rationale.md` |
 
 ---
 

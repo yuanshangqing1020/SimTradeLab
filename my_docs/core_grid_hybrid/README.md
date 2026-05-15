@@ -27,7 +27,7 @@
 
 | 版本 | 状态 | 摘要 | 文档 |
 |------|------|------|------|
-| **v1.0** | 设计已定稿；**实现已演进** | 单标的；原设计为死仓+活仓+几何网格；**当前 SimTradeLab 默认 = trend_sizing** | [设计 →](v1.0/01-design.md) · [实施计划 →](v1.0/02-plan.md) · [回测纪要 →](v1.0/03-optimization-summary.md) |
+| **v1.0** | 设计已定稿；**实现已演进** | 单标的；原设计为死仓+活仓+几何网格；**当前 SimTradeLab 默认 = trend_sizing** | [理念 →](v1.0/00-rationale.md) · [设计 →](v1.0/01-design.md) · [实施计划 →](v1.0/02-plan.md) · [回测纪要 →](v1.0/03-optimization-summary.md) |
 
 ---
 
@@ -37,6 +37,7 @@
 my_docs/
 └── core_grid_hybrid/
     └── v1.0/
+        ├── 00-rationale.md          # 投资理念（原独立目录已合并）
         ├── 01-design.md
         ├── 02-plan.md
         └── 03-optimization-summary.md
@@ -64,6 +65,6 @@ strategies_jq/
 
 ---
 
-## 理念说明（原文）
+## 投资理念（文字稿）
 
-[`../core_grid_hybrid_strategy /README.MD`](../core_grid_hybrid_strategy%20/README.MD)（目录名含空格；可择机迁入 `v1.0/00-rationale.md`）。
+详细直觉与纪律说明见 **[`v1.0/00-rationale.md`](v1.0/00-rationale.md)**（由原 `core_grid_hybrid_strategy` 目录合并而来）。

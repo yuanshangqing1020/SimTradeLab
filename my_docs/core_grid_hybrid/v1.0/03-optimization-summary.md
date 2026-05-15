@@ -41,6 +41,7 @@ PYTHONPATH=src python src/simtradelab/backtest/run_backtest.py
 
 | 组件 | 说明 |
 |------|------|
+| `v1.0/00-rationale.md` | 投资理念与网格直觉（原独立目录已合并） |
 | `trend_sizing` | 当前默认执行路径：`order_target_value` + 慢均线 z + 峰值回撤限仓 |
 | `pick_grid_action_close` 等 | 保留供单测与设计文档 §2 网格规格对照 |
 | 聚宽 | `strategies_jq/core_grid_hybrid/v1/strategy.py` |
