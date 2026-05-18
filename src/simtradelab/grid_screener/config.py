@@ -54,27 +54,7 @@ class RunConfig(BaseModel):
     default_asset_type: Literal["stock", "etf"] = "stock"
     etf_symbols_path: str | None = None
     output_csv: str = "grid_screener_report.csv"
-    output_md: str | None = "grid_screener_report.md"
     composite_weights: dict[str, float] = Field(default_factory=dict)
-    # 导出瘦身：全市场时建议 csv_max_rows + full_parquet_path
-    csv_max_rows: int | None = Field(
-        default=None,
-        ge=1,
-        description="仅将排序后的前 N 行写入 output_csv；None 表示全量写入该 CSV",
-    )
-    csv_chunk_rows: int | None = Field(
-        default=None,
-        ge=500,
-        description="若设置且待写 CSV 行数超过该值，则拆成多个 *_part0001.csv；与 csv_max_rows 可同时用（先截断再分片）",
-    )
-    full_parquet_path: str | None = Field(
-        default=None,
-        description="若设置：在截断/分片前写入完整排序结果 Parquet（体积小，适合 pandas 全量分析）",
-    )
-    markdown_max_rows: int | None = Field(
-        default=400,
-        description="Markdown 表最多行数；JSON 设为 null 则与 CSV 视图同宽（行数多时会极大，慎用）",
-    )
 
     @model_validator(mode="after")
     def _csv_requires_universe_or_discover(self) -> RunConfig:

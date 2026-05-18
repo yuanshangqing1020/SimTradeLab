@@ -63,6 +63,44 @@ def test_explain_emits_zh_strings():
     assert all(isinstance(s, str) for s in lines)
 
 
+def test_format_explanations_for_export_normalizes_punct():
+    from simtradelab.grid_screener.explain import format_explanations_for_export
+
+    s = format_explanations_for_export(
+        [
+            "大跳空占比偏高：隔夜跳开可能放大滑点与挂单风险。",
+            "区间震荡时间占比较高：与网格友好方向更一致（仍需结合趋势项）。",
+        ]
+    )
+    assert "\uff1a" not in s
+    assert "\u3002" not in s
+    assert " | " in s
+    assert "(" in s and ")" in s
+
+
+def test_lookup_stock_name_aliases():
+    from simtradelab.grid_screener.data_path import lookup_stock_name
+
+    m = {"502011.SH": "测试LOF"}
+    assert lookup_stock_name(m, "502011.SS") == "测试LOF"
+
+
+def test_format_export_table_rounds_floats():
+    from simtradelab.grid_screener.report import format_export_table
+
+    df = pd.DataFrame(
+        {
+            "symbol": ["X"],
+            "trend_t": [1.6044569443876195],
+            "effective_days": [1250],
+            "history_short": [False],
+        }
+    )
+    got = format_export_table(df, float_decimals=4)
+    assert got["trend_t"].iloc[0] == 1.6045
+    assert got["effective_days"].iloc[0] == 1250
+
+
 def test_rows_to_sorted_frame_sorts():
     rows = [
         {"symbol": "A", "range_time_ratio": 0.1, "trend_t": 0.5},
@@ -72,21 +110,12 @@ def test_rows_to_sorted_frame_sorts():
     assert df.iloc[0]["symbol"] == "B"
 
 
-def test_write_csv_chunked_splits(tmp_path):
-    from simtradelab.grid_screener.report import write_csv_chunked
+def test_write_csv_limits_float_width(tmp_path):
+    from simtradelab.grid_screener.report import format_export_table, write_csv
 
-    df = pd.DataFrame({"a": range(250)})
+    df = format_export_table(pd.DataFrame({"x": [1.23456789], "y": [9]}))
     out = tmp_path / "rep.csv"
-    paths = write_csv_chunked(df, out, chunk_rows=100)
-    assert len(paths) == 3
-    assert (tmp_path / "rep_part0001.csv").is_file()
-
-
-def test_write_csv_chunked_single_file_when_small(tmp_path):
-    from simtradelab.grid_screener.report import write_csv_chunked
-
-    df = pd.DataFrame({"a": range(50)})
-    out = tmp_path / "rep.csv"
-    paths = write_csv_chunked(df, out, chunk_rows=500)
-    assert len(paths) == 1
-    assert paths[0] == str(out.resolve())
+    write_csv(df, out)
+    text = out.read_text(encoding="utf-8-sig")
+    assert "1.2346" in text
+    assert "1.23456789" not in text

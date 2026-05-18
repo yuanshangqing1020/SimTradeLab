@@ -4,10 +4,5 @@
     "window_trading_days": 1250,
     "n_min_valid": 500
   },
-  "output_csv": "examples/grid_screener/out/report_top_csv.csv",
-  "output_md": "examples/grid_screener/out/report_top.md",
-  "csv_max_rows": 3000,
-  "full_parquet_path": "examples/grid_screener/out/report_full.parquet",
-  "markdown_max_rows": 200,
-  "csv_chunk_rows": null
+  "output_csv": "examples/grid_screener/out/report_full.csv"
 }

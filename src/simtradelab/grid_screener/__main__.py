@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 from glob import glob
 from pathlib import Path
 
@@ -13,24 +12,17 @@ from simtradelab.grid_screener.config import (
     load_etf_symbol_set,
     load_run_config,
 )
-from simtradelab.grid_screener.data_path import load_stock_name_map, resolve_stock_data_root
-from simtradelab.grid_screener.explain import explain_row
+from simtradelab.grid_screener.data_path import load_stock_name_map, lookup_stock_name, resolve_stock_data_root
+from simtradelab.grid_screener.explain import explain_row, format_explanations_for_export
 from simtradelab.grid_screener.io_csv import read_ohlcv_csv
 from simtradelab.grid_screener.io_parquet import ohlcv_from_stock_parquet_df
 from simtradelab.grid_screener.pipeline import compute_screener_row
-from simtradelab.grid_screener.report import (
-    rows_to_sorted_frame,
-    write_csv,
-    write_csv_chunked,
-    write_markdown,
-    write_parquet,
-)
+from simtradelab.grid_screener.report import format_export_table, rows_to_sorted_frame, write_csv
 from simtradelab.ptrade import storage
 
 _DISCLAIMER = (
     "风险提示：分项仅描述历史统计特征，不构成收益承诺；股票与 ETF 同表并列时跨类绝对值比较需谨慎。"
     " trend_t 为经典 OLS t 统计量（非同方差稳健）。"
-    " Parquet 模式与回测相同：data_path + market 解析后使用 storage.list_stocks / storage.load_stock。"
 )
 
 
@@ -44,7 +36,7 @@ def _apply_as_of(df: pd.DataFrame, as_of: str | None) -> pd.DataFrame:
 def _finalize_row(row: dict) -> dict:
     expl = explain_row(row)
     out = dict(row)
-    out["explanations"] = json.dumps(expl, ensure_ascii=False)
+    out["explanations"] = format_explanations_for_export(expl)
     return out
 
 
@@ -69,7 +61,7 @@ def _nan_row_missing_file(meta: UniverseItem) -> dict:
         "range_time_ratio": nan,
         "vol_band": "unknown",
         "grid_friendly_score": nan,
-        "explanations": json.dumps(["未找到匹配的行情文件。"], ensure_ascii=False),
+        "explanations": format_explanations_for_export(["未找到匹配的行情文件。"]),
     }
 
 
@@ -91,7 +83,7 @@ def _run_parquet_mode(cfg: RunConfig, etf_set: set[str], progress: bool) -> list
 
     for sym in it:
         atype = "etf" if sym in etf_set else cfg.default_asset_type
-        meta = UniverseItem(symbol=sym, name=name_map.get(sym, ""), asset_type=atype)
+        meta = UniverseItem(symbol=sym, name=lookup_stock_name(name_map, sym), asset_type=atype)
         raw = storage.load_stock(root, sym)
         if raw is None or raw.empty:
             empty_ohlcv = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
@@ -150,58 +142,22 @@ def main() -> None:
         rows = _run_parquet_mode(cfg, etf_set, progress=not args.quiet and not args.no_progress)
 
     out = rows_to_sorted_frame(rows)
-    n_full = len(out)
-
-    if cfg.full_parquet_path and str(cfg.full_parquet_path).strip() != "":
-        write_parquet(out, cfg.full_parquet_path)
-
-    view = out
-    if cfg.csv_max_rows is not None:
-        view = out.head(cfg.csv_max_rows)
-
-    chunk_sz = cfg.csv_chunk_rows
-    if chunk_sz is not None:
-        csv_written = write_csv_chunked(view, cfg.output_csv, chunk_sz)
-    else:
-        write_csv(view, cfg.output_csv)
-        csv_written = [str(Path(cfg.output_csv).resolve())]
-
-    if cfg.output_md and str(cfg.output_md).strip() != "":
-        md_cap = cfg.markdown_max_rows
-        if md_cap is not None:
-            md_df = view.head(md_cap)
-            tail_note = ""
-            if len(view) > md_cap:
-                tail_note = "\n\n（Markdown 仅前 {n} 行，避免文件过大；完整请用 Parquet 或 CSV。）".format(n=md_cap)
-        else:
-            md_df = view
-            tail_note = ""
-        write_markdown(md_df, cfg.output_md, _DISCLAIMER + tail_note)
+    export_df = format_export_table(out)
+    write_csv(export_df, cfg.output_csv)
 
     if not args.quiet:
+        print(_DISCLAIMER)
         root_info = ""
         if not use_csv:
             root_info = "，数据根目录={root!r}".format(root=resolve_stock_data_root(cfg.data_path, cfg.market))
-        md_disp = cfg.output_md if (cfg.output_md and str(cfg.output_md).strip()) else "（未配置，已跳过）"
-        pq_set = cfg.full_parquet_path and str(cfg.full_parquet_path).strip() != ""
         print(
-            "grid_screener: 完成。模式={mode}，全量行数={nf}，CSV 视图行数={nv}{root}".format(
+            "grid_screener: 完成。模式={mode}，全量行数={nf}{root}".format(
                 mode="csv" if use_csv else "parquet(同回测)",
-                nf=n_full,
-                nv=len(view),
+                nf=len(out),
                 root=root_info,
             )
         )
-        if pq_set:
-            print("  全量 Parquet: {0!r}".format(str(Path(cfg.full_parquet_path).resolve())))
-        if len(csv_written) == 1:
-            print("  CSV: {0!r}".format(csv_written[0]))
-        else:
-            print("  CSV 分片共 {0} 个，首文件: {1!r}".format(len(csv_written), csv_written[0]))
-        if md_disp != "（未配置，已跳过）":
-            print("  Markdown: {0!r}".format(str(Path(md_disp).resolve())))
-        else:
-            print("  Markdown: （未配置，已跳过）")
+        print("  CSV: {0!r}".format(str(Path(cfg.output_csv).resolve())))
 
 
 if __name__ == "__main__":

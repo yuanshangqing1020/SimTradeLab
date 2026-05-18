@@ -5,6 +5,34 @@ from typing import Any
 
 import pandas as pd
 
+# CSV 导出：写入文件时限定小数位数（避免 to_csv 仍打印过长浮点表示）
+EXPORT_FLOAT_DECIMALS = 4
+
+_STRING_EXPORT_COLUMNS = frozenset({"symbol", "name", "asset_type", "explanations", "vol_band"})
+
+
+def format_export_table(df: pd.DataFrame, float_decimals: int = EXPORT_FLOAT_DECIMALS) -> pd.DataFrame:
+    """供 CSV 使用：缩短浮点小数位；字符串/布尔/整数列不动。"""
+    if df.empty:
+        return df
+    out = df.copy()
+    for col in out.columns:
+        if col in _STRING_EXPORT_COLUMNS:
+            continue
+        s = out[col]
+        if pd.api.types.is_bool_dtype(s):
+            continue
+        if pd.api.types.is_integer_dtype(s):
+            continue
+        if pd.api.types.is_float_dtype(s):
+            out[col] = s.round(float_decimals)
+            continue
+        if s.dtype == object:
+            continue
+        if pd.api.types.is_numeric_dtype(s):
+            out[col] = pd.to_numeric(s, errors="coerce").round(float_decimals)
+    return out
+
 
 def rows_to_sorted_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
     df = pd.DataFrame(rows)
@@ -21,40 +49,12 @@ def rows_to_sorted_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def write_csv(df: pd.DataFrame, path: str | Path) -> None:
+def write_csv(
+    df: pd.DataFrame,
+    path: str | Path,
+    *,
+    float_decimals: int = EXPORT_FLOAT_DECIMALS,
+) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(path, index=False, encoding="utf-8-sig")
-
-
-def write_parquet(df: pd.DataFrame, path: str | Path) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    df.to_parquet(path, index=False, compression="snappy")
-
-
-def write_csv_chunked(df: pd.DataFrame, path: str | Path, chunk_rows: int) -> list[str]:
-    """行数 <= chunk_rows 时仍写入 path；否则写入 path 同级 ``{stem}_part0001.csv`` …"""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    n = len(df)
-    if n == 0:
-        df.to_csv(path, index=False, encoding="utf-8-sig")
-        return [str(path.resolve())]
-    if n <= chunk_rows:
-        df.to_csv(path, index=False, encoding="utf-8-sig")
-        return [str(path.resolve())]
-    stem, suffix = path.stem, path.suffix
-    written: list[str] = []
-    part = 1
-    for start in range(0, n, chunk_rows):
-        chunk = df.iloc[start : start + chunk_rows]
-        out = path.parent / ("{0}_part{1:04d}{2}".format(stem, part, suffix))
-        chunk.to_csv(out, index=False, encoding="utf-8-sig")
-        written.append(str(out.resolve()))
-        part += 1
-    return written
-
-
-def write_markdown(df: pd.DataFrame, path: str | Path, disclaimer_zh: str) -> None:
-    lines = [disclaimer_zh, "", df.to_markdown(index=False)]
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text("\n".join(lines), encoding="utf-8")
+    fmt = "%.{0}f".format(max(0, int(float_decimals)))
+    df.to_csv(path, index=False, encoding="utf-8-sig", float_format=fmt)

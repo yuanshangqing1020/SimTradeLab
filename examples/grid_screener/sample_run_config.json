@@ -7,6 +7,5 @@
     { "symbol": "DEMO001", "name": "Demo Stock", "asset_type": "stock" }
   ],
   "ohlcv_glob": "examples/grid_screener/data/DEMO001.csv",
-  "output_csv": "examples/grid_screener/out/report_demo.csv",
-  "output_md": "examples/grid_screener/out/report_demo.md"
+  "output_csv": "examples/grid_screener/out/report_demo.csv"
 }
