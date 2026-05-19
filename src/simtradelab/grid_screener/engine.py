@@ -5,7 +5,7 @@ import pandas as pd
 from simtradelab.grid_screener.config import RunConfig, UniverseItem
 from simtradelab.grid_screener.context import FactorContext
 from simtradelab.grid_screener.factors.registry import FactorRegistry, default_registry
-from simtradelab.grid_screener.market_data import MarketDataSession
+from simtradelab.grid_screener.api_data import ScreenerDataAPI
 from simtradelab.grid_screener.preprocess import normalize_ohlcv, slice_window
 from simtradelab.grid_screener.io_csv import read_ohlcv_csv
 
@@ -41,12 +41,12 @@ def compute_row(
 
 
 def run_symbol_parquet(
-    session: MarketDataSession,
+    data_api: ScreenerDataAPI,
     meta: UniverseItem,
     cfg: RunConfig,
     registry: FactorRegistry | None = None,
 ) -> dict[str, object]:
-    raw = session.load_ohlcv(meta.symbol, as_of=cfg.as_of)
+    raw = data_api.load_ohlcv(meta.symbol)
     return compute_row(raw, meta, cfg, registry)
 
 

@@ -5,12 +5,11 @@ from glob import glob
 from pathlib import Path
 
 from simtradelab.grid_screener.config import RunConfig, UniverseItem, load_etf_symbol_set, load_run_config
-from simtradelab.grid_screener.data_path import load_stock_name_map, lookup_stock_name, resolve_stock_data_root
+from simtradelab.grid_screener.api_data import ScreenerDataAPI
 from simtradelab.grid_screener.engine import compute_row, run_symbol_csv, run_symbol_parquet
 from simtradelab.grid_screener.explain import format_explanations_for_export
 from simtradelab.grid_screener.explain.registry import get_explain
 from simtradelab.grid_screener.factors.registry import default_registry
-from simtradelab.grid_screener.market_data import MarketDataSession
 from simtradelab.grid_screener.report import format_export_table, rows_to_sorted_frame, write_csv
 _DISCLAIMER = (
     "风险提示：分项仅描述历史统计特征，不构成收益承诺；股票与 ETF 同表并列时跨类绝对值比较需谨慎。"
@@ -37,11 +36,9 @@ def _nan_row_missing_file(meta: UniverseItem, cfg: RunConfig) -> dict:
     return row
 
 
-def _run_parquet_mode(cfg: RunConfig, etf_set: set[str], progress: bool) -> list[dict]:
-    session = MarketDataSession(cfg.data_path, cfg.market, fq=cfg.resolved_fq())
-    root = session.data_root
-    symbols = session.list_symbols()
-    name_map = load_stock_name_map(root)
+def _run_parquet_mode(cfg: RunConfig, etf_set: set[str], progress: bool, *, quiet: bool) -> list[dict]:
+    data_api = ScreenerDataAPI(cfg, quiet=quiet)
+    symbols = data_api.list_symbols()
     registry = default_registry()
     rows: list[dict] = []
 
@@ -56,8 +53,8 @@ def _run_parquet_mode(cfg: RunConfig, etf_set: set[str], progress: bool) -> list
 
     for sym in it:
         atype = "etf" if sym in etf_set else cfg.default_asset_type
-        meta = UniverseItem(symbol=sym, name=lookup_stock_name(name_map, sym), asset_type=atype)
-        row = run_symbol_parquet(session, meta, cfg, registry)
+        meta = UniverseItem(symbol=sym, name=data_api.get_stock_name(sym), asset_type=atype)
+        row = run_symbol_parquet(data_api, meta, cfg, registry)
         rows.append(_attach_explanations(row, cfg))
     return rows
 
@@ -104,7 +101,12 @@ def main() -> None:
     if use_csv:
         rows = _run_csv_mode(cfg, etf_set)
     else:
-        rows = _run_parquet_mode(cfg, etf_set, progress=not args.quiet and not args.no_progress)
+        rows = _run_parquet_mode(
+            cfg,
+            etf_set,
+            progress=not args.quiet and not args.no_progress,
+            quiet=args.quiet,
+        )
 
     out = rows_to_sorted_frame(rows, cfg.sort_spec())
     export_df = format_export_table(out)
@@ -114,8 +116,7 @@ def main() -> None:
         print(_DISCLAIMER)
         extra = ""
         if not use_csv:
-            root = resolve_stock_data_root(cfg.data_path, cfg.market)
-            extra = " data_root={0!r} fq={1!r}".format(root, cfg.resolved_fq())
+            extra = " api=get_price fq={0!r}".format(cfg.resolved_fq())
         print(
             "grid_screener: rows={0} factors={1}{2}".format(
                 len(out), cfg.resolved_factors(), extra

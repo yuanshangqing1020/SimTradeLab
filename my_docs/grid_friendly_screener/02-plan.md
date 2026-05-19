@@ -10,7 +10,7 @@ src/simtradelab/grid_screener/
   __main__.py          # CLI
   config.py            # RunConfig, ScreenerParams, preset 展开
   context.py           # FactorContext
-  market_data.py       # MarketDataSession, fq 复权
+  api_data.py          # ScreenerDataAPI → DataServer + get_price（同 miner.init_api）
   engine.py            # run_universe → list[dict]
   sort_spec.py         # SortSpec → sort DataFrame
   metrics.py           # 纯 NumPy 统计（不变）

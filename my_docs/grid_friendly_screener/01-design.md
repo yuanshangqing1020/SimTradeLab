@@ -101,10 +101,10 @@ class MyFactor:
 
 ### 2.5 行情与复权
 
-- **路径**：与 `BacktestConfig` / `DataServer` 相同（`get_data_path()` → `cn/` 等）。
-- **加载**：`storage.load_stock`；**禁止** screener 直接拼 `cn/stocks/*.parquet` 路径绕过 storage。
-- **复权**：`RunConfig.fq`，默认 `"pre"`。从 `ptrade_adj_pre.parquet`（或 post）加载缓存；缺失时按标的从 `exrights` 现场计算（与 `adj_cache` 一致）。
-- **截止日**：`as_of` 截断索引后再做窗口切片。
+- **入口**：`DataServer` + `PtradeAPI`（与 `strategies/grid_mining/miner.py` 中 `init_api` 相同写法，在 `grid_screener/api_data.py` 内初始化）。
+- **取数**：`PtradeAPI.get_price(..., fq=...)`，**不**在 screener 内重复实现 `storage.load_stock` / 复权公式。
+- **Universe / 名称**：`get_Ashares`、`get_stock_name`。
+- **窗口**：`count=window_trading_days` + `end_date=as_of`（`context.current_dt` 同步为 `as_of`）。
 
 ---
 
