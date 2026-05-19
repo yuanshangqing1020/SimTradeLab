@@ -1,0 +1,23 @@
+{
+  "factors": [
+    "meta",
+    "sample_quality",
+    "trend",
+    "variance_ratio",
+    "acf1",
+    "volatility",
+    "gap",
+    "range_regime",
+    "grid_score"
+  ],
+  "sort": [
+    {"field": "range_time_ratio", "ascending": false},
+    {"field": "trend_t", "ascending": true}
+  ],
+  "explain": "grid_default",
+  "fq": "pre",
+  "params": {
+    "window_trading_days": 1250,
+    "n_min_valid": 500
+  }
+}

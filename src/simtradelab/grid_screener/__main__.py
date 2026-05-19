@@ -4,72 +4,45 @@ import argparse
 from glob import glob
 from pathlib import Path
 
-import pandas as pd
-
-from simtradelab.grid_screener.config import (
-    RunConfig,
-    UniverseItem,
-    load_etf_symbol_set,
-    load_run_config,
-)
+from simtradelab.grid_screener.config import RunConfig, UniverseItem, load_etf_symbol_set, load_run_config
 from simtradelab.grid_screener.data_path import load_stock_name_map, lookup_stock_name, resolve_stock_data_root
-from simtradelab.grid_screener.explain import explain_row, format_explanations_for_export
-from simtradelab.grid_screener.io_csv import read_ohlcv_csv
-from simtradelab.grid_screener.io_parquet import ohlcv_from_stock_parquet_df
-from simtradelab.grid_screener.pipeline import compute_screener_row
+from simtradelab.grid_screener.engine import compute_row, run_symbol_csv, run_symbol_parquet
+from simtradelab.grid_screener.explain import format_explanations_for_export
+from simtradelab.grid_screener.explain.registry import get_explain
+from simtradelab.grid_screener.factors.registry import default_registry
+from simtradelab.grid_screener.market_data import MarketDataSession
 from simtradelab.grid_screener.report import format_export_table, rows_to_sorted_frame, write_csv
-from simtradelab.ptrade import storage
-
 _DISCLAIMER = (
     "风险提示：分项仅描述历史统计特征，不构成收益承诺；股票与 ETF 同表并列时跨类绝对值比较需谨慎。"
     " trend_t 为经典 OLS t 统计量（非同方差稳健）。"
 )
 
 
-def _apply_as_of(df: pd.DataFrame, as_of: str | None) -> pd.DataFrame:
-    if as_of is None:
-        return df
-    cutoff = pd.Timestamp(as_of)
-    return df.loc[df.index <= cutoff]
-
-
-def _finalize_row(row: dict) -> dict:
-    expl = explain_row(row)
+def _attach_explanations(row: dict, cfg: RunConfig) -> dict:
+    fn = get_explain(cfg.explain)
     out = dict(row)
-    out["explanations"] = format_explanations_for_export(expl)
+    if fn is None:
+        out["explanations"] = ""
+    else:
+        out["explanations"] = format_explanations_for_export(fn(row))
     return out
 
 
-def _nan_row_missing_file(meta: UniverseItem) -> dict:
-    nan = float("nan")
-    return {
-        "symbol": meta.symbol,
-        "name": meta.name,
-        "asset_type": meta.asset_type,
-        "effective_days": 0,
-        "history_short": False,
-        "insufficient_data": True,
-        "trend_t": nan,
-        "trend_r2": nan,
-        "variance_ratio": nan,
-        "acf1_ret": nan,
-        "rv_ann": nan,
-        "vol_comfort_score": nan,
-        "mean_abs_gap": nan,
-        "gap_tail_ratio": nan,
-        "intraday_extreme_ratio": nan,
-        "range_time_ratio": nan,
-        "vol_band": "unknown",
-        "grid_friendly_score": nan,
-        "explanations": format_explanations_for_export(["未找到匹配的行情文件。"]),
-    }
+def _nan_row_missing_file(meta: UniverseItem, cfg: RunConfig) -> dict:
+    import pandas as pd
+
+    empty = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
+    row = compute_row(empty, meta, cfg)
+    row["explanations"] = format_explanations_for_export(["未找到匹配的行情文件。"])
+    return row
 
 
 def _run_parquet_mode(cfg: RunConfig, etf_set: set[str], progress: bool) -> list[dict]:
-    """全市场：与 `DataServer` / 回测相同的 Parquet 根目录与 storage API。"""
-    root = resolve_stock_data_root(cfg.data_path, cfg.market)
-    symbols = sorted(storage.list_stocks(root))
+    session = MarketDataSession(cfg.data_path, cfg.market, fq=cfg.resolved_fq())
+    root = session.data_root
+    symbols = session.list_symbols()
     name_map = load_stock_name_map(root)
+    registry = default_registry()
     rows: list[dict] = []
 
     it = symbols
@@ -77,22 +50,15 @@ def _run_parquet_mode(cfg: RunConfig, etf_set: set[str], progress: bool) -> list
         try:
             from tqdm import tqdm
 
-            it = tqdm(symbols, desc="grid_screener(parquet)", unit="sym")
+            it = tqdm(symbols, desc="grid_screener", unit="sym")
         except Exception:
             pass
 
     for sym in it:
         atype = "etf" if sym in etf_set else cfg.default_asset_type
         meta = UniverseItem(symbol=sym, name=lookup_stock_name(name_map, sym), asset_type=atype)
-        raw = storage.load_stock(root, sym)
-        if raw is None or raw.empty:
-            empty_ohlcv = pd.DataFrame(columns=["open", "high", "low", "close", "volume"])
-            row = compute_screener_row(empty_ohlcv, meta, cfg.params)
-        else:
-            raw = ohlcv_from_stock_parquet_df(raw)
-            raw = _apply_as_of(raw, cfg.as_of)
-            row = compute_screener_row(raw, meta, cfg.params)
-        rows.append(_finalize_row(row))
+        row = run_symbol_parquet(session, meta, cfg, registry)
+        rows.append(_attach_explanations(row, cfg))
     return rows
 
 
@@ -103,6 +69,7 @@ def _run_csv_mode(cfg: RunConfig, etf_set: set[str]) -> list[dict]:
         raise SystemExit("no OHLCV files matched: {0}".format(cfg.ohlcv_glob))
 
     sym_to_path = {Path(p).stem: p for p in paths}
+    registry = default_registry()
 
     if cfg.discover_glob:
         items = []
@@ -117,20 +84,18 @@ def _run_csv_mode(cfg: RunConfig, etf_set: set[str]) -> list[dict]:
     for item in items:
         pth = sym_to_path.get(item.symbol)
         if pth is None:
-            rows.append(_nan_row_missing_file(item))
+            rows.append(_nan_row_missing_file(item, cfg))
             continue
-        df = read_ohlcv_csv(pth)
-        df = _apply_as_of(df, cfg.as_of)
-        row = compute_screener_row(df, item, cfg.params)
-        rows.append(_finalize_row(row))
+        row = run_symbol_csv(pth, item, cfg, registry)
+        rows.append(_attach_explanations(row, cfg))
     return rows
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Grid-friendly daily screener")
+    ap = argparse.ArgumentParser(description="Daily screener with pluggable factors and sort")
     ap.add_argument("--config", required=True, help="Path to RunConfig JSON")
-    ap.add_argument("-q", "--quiet", action="store_true", help="不写完成摘要到标准输出")
-    ap.add_argument("--no-progress", action="store_true", help="关闭 tqdm 进度条（Parquet 全市场模式）")
+    ap.add_argument("-q", "--quiet", action="store_true")
+    ap.add_argument("--no-progress", action="store_true")
     args = ap.parse_args()
     cfg = load_run_config(args.config)
     etf_set = load_etf_symbol_set(cfg.etf_symbols_path)
@@ -141,20 +106,19 @@ def main() -> None:
     else:
         rows = _run_parquet_mode(cfg, etf_set, progress=not args.quiet and not args.no_progress)
 
-    out = rows_to_sorted_frame(rows)
+    out = rows_to_sorted_frame(rows, cfg.sort_spec())
     export_df = format_export_table(out)
     write_csv(export_df, cfg.output_csv)
 
     if not args.quiet:
         print(_DISCLAIMER)
-        root_info = ""
+        extra = ""
         if not use_csv:
-            root_info = "，数据根目录={root!r}".format(root=resolve_stock_data_root(cfg.data_path, cfg.market))
+            root = resolve_stock_data_root(cfg.data_path, cfg.market)
+            extra = " data_root={0!r} fq={1!r}".format(root, cfg.resolved_fq())
         print(
-            "grid_screener: 完成。模式={mode}，全量行数={nf}{root}".format(
-                mode="csv" if use_csv else "parquet(同回测)",
-                nf=len(out),
-                root=root_info,
+            "grid_screener: rows={0} factors={1}{2}".format(
+                len(out), cfg.resolved_factors(), extra
             )
         )
         print("  CSV: {0!r}".format(str(Path(cfg.output_csv).resolve())))

@@ -1,0 +1,6 @@
+{
+  "preset": "grid_friendly_v1",
+  "market": "CN",
+  "fq": "pre",
+  "output_csv": "examples/grid_screener/out/report.csv"
+}

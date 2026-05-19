@@ -3,22 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 
-def format_explanations_for_export(lines: list[str]) -> str:
-    """将多条说明拼成一列：用 ASCII 分隔符连接，并把常见全角标点换成半角，减轻 Excel 等环境下的异常显示。"""
-    s = " | ".join(lines)
-    s = (
-        s.replace("\uff1a", ": ")
-        .replace("\uff0c", ", ")
-        .replace("\u3001", ", ")
-        .replace("\u3002", ". ")
-        .replace("\uff08", "(")
-        .replace("\uff09", ")")
-        .replace("\uff1b", "; ")
-    )
-    return " ".join(s.split()).strip()
-
-
-def explain_row(row: dict[str, Any]) -> list[str]:
+def explain_grid_default(row: dict[str, Any]) -> list[str]:
     if row.get("insufficient_data"):
         return ["有效交易日不足：分项未计算或不可靠。"]
     out: list[str] = []

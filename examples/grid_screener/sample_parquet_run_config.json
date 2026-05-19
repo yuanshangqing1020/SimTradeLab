@@ -1,8 +1,0 @@
-{
-  "market": "CN",
-  "params": {
-    "window_trading_days": 1250,
-    "n_min_valid": 500
-  },
-  "output_csv": "examples/grid_screener/out/report_full.csv"
-}

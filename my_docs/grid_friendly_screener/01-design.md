@@ -1,7 +1,7 @@
-# 网格友好标的筛选器（日线统计版）— 设计规格 v1.0
+# 日线标的筛选器 — 设计规格 v2.0
 
-> **定位**：第 3 条研究线——在 **不绑定** 某一组固定网格参数、不做全样本逐标的网格回测的前提下，用 **约 5 年+ 日线** 对 **A 股 + 场内 ETF** 计算可解释的统计量，产出 **人读** 主报告（一张总表 + 规则生成的短解释），支撑手工挑选适合网格的标的。  
-> **与现有策略关系**：可与 `grid_multi_asset` / `core_grid_hybrid` 并行使用；v1 **不**负责向策略 Universe 输出机读文件。
+> **定位**：可插拔的 **日频统计筛选框架**。默认附带一套「网格友好度」参考因子与解释规则，但 **因子列表、排序、解释模板均可配置**，便于后续替换或扩展。  
+> **与策略关系**：统计与 `grid_multi_asset` 等策略 **解耦**；v2 **不**输出机读 Universe 文件。
 
 ---
 
@@ -9,183 +9,178 @@
 
 ### 1.1 目标
 
-- 对给定 **全样本或配置列表** 中的每个标的，在统一 **日频窗口** 上计算一组 **网格友好度相关** 的分项指标（原始数值，可审计）。
-- 生成 **单张总表**（含 `asset_type`：`stock` / `etf`），分项并列；接受跨资产类别在「绝对数值尺度」上不完全可比，由读者结合经验阅读（报告模板含固定风险提示）。
-- 可选：在分项之上增加 **固定权重** 的 **综合分**，仅用于快速排序，**不**表述为收益或夏普承诺。
-- 对 **历史不足默认窗口** 的标的：**不剔除**，使用 **可得最长历史** 计算，并打 **`history_short`** 等标签，避免次新与长龄标的不公平静默丢失。
+- 对 Universe 内每个标的，在统一日频窗口上计算 **可配置因子集**（原始数值，可审计）。
+- 行情经 SimTradeLab **与回测一致的数据根 + 复权管线** 取得（默认前复权 `fq=pre`）。
+- 导出 **单张 CSV**（列 = 元数据 + 各因子列 + 可选规则解释列）。
+- **排序完全由配置指定**（多键、升/降序），不硬编码「网格友好」排序逻辑。
+- 新增因子：实现 `Factor` 协议并注册（或放入 `factors/custom/` 后在配置中引用）。
 
-### 1.2 非目标（v1 明确不做）
+### 1.2 非目标（v2）
 
-- 分钟/ tick 级特征与两阶段「日线粗筛 + 分钟精排」。
-- 对每个标的运行完整网格策略回测或参数搜索。
-- 自动生成供 `grid_multi_asset_v*` 直接加载的 Universe JSON（若后续需要，作为独立增量任务）。
-- 用 ML / PCA 等 **黑箱** 作为主排序依据（与「人读、可解释」冲突）。
+- 分钟/tick、逐标的完整网格回测、ML 黑箱主排序。
+- 自动生成策略 Universe JSON。
+- 运行时从网络拉行情（仅用本地 `data/` Parquet，与回测相同）。
 
 ---
 
-## 2. 口径摘要（已确认决策）
+## 2. 架构
 
-| 维度 | 选择 |
+```
+RunConfig (JSON)
+    │
+    ├─► MarketDataSession ──► storage.load_stock + adj 缓存 (fq)
+    │
+    ├─► FactorRegistry ──► [factor₁, factor₂, …] 按序 compute
+    │         │
+    │         └─► 合并为 row dict
+    │
+    ├─► ExplainRegistry (可选) ──► explanations 列
+    │
+    └─► sort_spec ──► report.write_csv
+```
+
+### 2.1 核心抽象
+
+| 组件 | 职责 |
 |------|------|
-| 与策略关系 | **解耦**：统计定义不依赖某一网格实现 |
-| 行情频率 | **日线** |
-| 标的范围 | **A 股股票** + **场内 ETF** |
-| 默认回看 | **≥5 年** 交易日（若数据仅覆盖更短，则用全长并标签） |
-| 产出形态 | **人读**：主表 + 分项 + 规则生成短解释 |
-| 表结构 | **一张总表** + `asset_type`，关键列为 **原始指标值** |
+| `MarketDataSession` | 解析 `data_path`/`market`，加载 OHLCV，按 `fq` 复权 |
+| `FactorContext` | 单标的：窗口化 `DataFrame`、numpy 序列、`params`、`outputs` 累积 |
+| `Factor` | `name: str` + `compute(ctx) -> dict[str, object]` |
+| `FactorRegistry` | 内置名 → 实例；`resolve(names) -> list[Factor]` |
+| `SortSpec` | `[{field, ascending}, …]`，传给 `pandas.sort_values` |
+| `ExplainRuleSet` | 命名规则集（如 `grid_default`），读 `row` 生成中文短句 |
 
----
+### 2.2 内置因子（preset `grid_friendly_v1`）
 
-## 3. 数据与样本规则
+| 因子名 | 输出列（节选） | 说明 |
+|--------|----------------|------|
+| `meta` | symbol, name, asset_type | 元数据 |
+| `sample_quality` | effective_days, history_short, insufficient_data | 样本门槛 |
+| `trend` | trend_t, trend_r2 | 对数价 OLS 趋势 |
+| `variance_ratio` | variance_ratio | 方差比率 VR(2) |
+| `acf1` | acf1_ret | 收益 lag-1 自相关 |
+| `volatility` | rv_ann, vol_comfort_score, vol_band | 实现波动与舒适区 |
+| `gap` | mean_abs_gap, gap_tail_ratio, intraday_extreme_ratio | 跳空与极端日 |
+| `range_regime` | range_time_ratio | 区间震荡占比 |
+| `grid_score` | grid_friendly_score | **可选** 固定权重综合分 |
 
-### 3.1 输入行情
+用户可在配置中 **删掉 `grid_score`**、**调换因子顺序**、或 **只保留子集**。
 
-- **字段**：至少 **OHLCV**（开高低收、成交量）；收盘价用于收益与大部分统计；若有 High/Low，可用于波动与跳空相关派生。
-- **来源**：与 SimTradeLab 现有数据管线对齐（具体连接子在实现阶段对接，本规格不写死供应商 API）。
+### 2.3 扩展新因子（开发者）
 
-### 3.2 窗口定义
+1. 在 `simtradelab/grid_screener/factors/` 下新增模块，实现：
 
-- **默认窗口长度**：**W = 1250 个交易日**（约 5 年，按各市场日历可用数据截尾部对齐到「报告截止日」）。
-- **截止日**：配置项 `as_of`（例如跑批当日最近一个完整交易日）。
-- **有效样本**：窗口内参与统计的交易日需有 **有效收盘价**；缺失日处理规则：**收益序列在缺失处断开**（不前值填充收益），统计前丢弃 `close` 为空的行；若有效日数 **< 最低阈值** `N_min`（建议默认 **500**，可配置），则该标的结果记为 **`insufficient_data`**，分项记 NaN 或空白，仍保留一行便于审计。
+```python
+class MyFactor:
+    name = "my_factor"
 
-### 3.3 标的与列表
-
-- **Universe 来源**：配置为「全市场可交易列表」或「显式代码表文件」；**ST**、长期停牌等 **不作为 v1 硬剔除条件**，改为 **质量标签列**（若元数据可得）。
-- **资产类型**：每行必填 `asset_type` ∈ {`stock`, `etf`}，由元数据或预定义列表映射。
-
-### 3.4 质量与标签列（建议）
-
-| 标签 / 列名 | 含义 |
-|-------------|------|
-| `history_short` | 可用连续（或有效）交易日长度 < W 但 ≥ `N_min` |
-| `insufficient_data` | 有效日 < `N_min` |
-| `st_flag` | 若为 ST（元数据可得） |
-| `suspend_ratio` | 窗口内无数据或可交易日缺失占比（可选） |
-
----
-
-## 4. 指标族（分项定义）
-
-以下符号：\(C_t\) 为收盘价，\(O_t\) 为开盘价，\(r_t = \ln(C_t/C_{t-1})\) 为对数收益（实现时可配置为简单收益，但全流水线 **统一一种**）。窗口内索引 \(t=1,\ldots,T\) 为有效交易日序列。
-
-### 4.1 趋势 / 漂移惩罚（`trend_score`，**越高越不利于网格**）
-
-- 对 \(\ln C_t\) 关于时间下标 \(t\) 做 **OLS 线性回归**，令斜率为 \(\beta\)，Newey–West 或 White 稳健标准误下的 **t 统计量**为 \(\text{trend\_t}\)（实现任选其一稳健方案并在报告中脚注固定）。
-- **输出**：`trend_t`（主列）；可选 **`trend_r2`** 作为辅助（价格对时间的解释度，高则趋势性更强）。
-- **读数**：\(\lvert \text{trend\_t}\rvert\) 大表示显著向上或向下漂移；网格偏好转弱趋势，故综合分时对该项 **取负向贡献**（见 §5）。
-
-### 4.2 均值回复 / 随机游走偏离（`vr_score`）
-
-- **方差比率**（经典 2 日对 1 日，无重叠或实现选用一种并在报告脚注固定）：  
-  \[
-  VR = \frac{\mathrm{Var}(r^{(2)}_t)}{2\,\mathrm{Var}(r_t)}
-  \]
-  其中 \(r^{(2)}_t = \ln(C_t/C_{t-2})\)。  
-- **解读**：\(VR \ll 1\) 偏向均值回复；\(VR \approx 1\) 近似随机游走；\(VR \gg 1\) 偏向平滑趋势或持久性。
-- **输出列**：`variance_ratio`。
-
-### 4.3 短期自相关（`acf1_ret`）
-
-- 窗口内 \(r_t\) 的 **lag-1 样本自相关** \(\rho_1\)。
-- **解读**：**显著为负** 常伴随短期反转，对网格较友好；**显著为正** 偏动量，对网格不利。
-- **输出列**：`acf1_ret`。
-
-### 4.4 波动水平与「舒适区」（`rv_ann` + `vol_comfort_score`）
-
-- **实现波动年化**：\(\sigma_{\text{ann}} = \mathrm{stdev}(r_t) \times \sqrt{252}\)。
-- **输出列**：`rv_ann`。
-- **舒适区分（建议默认参数，可配置）**：  
-  - 过低：\(\sigma_{\text{ann}} < \sigma_{\text{low}}\)（默认如 **10%**）→ 标为 `vol_low`，综合分 **略微惩罚**（格子空间有限）。  
-  - 过高：\(\sigma_{\text{ann}} > \sigma_{\text{high}}\)（默认如 **40%**）→ 标为 `vol_high`，**惩罚**跳空与执行风险。  
-  - 中间带：**不惩罚或轻奖励**（具体映射为 **0～1 的 `vol_comfort_score`** 在实现中单调定义）。
-
-### 4.5 隔夜跳空与极端日（`gap_burden`）
-
-- **隔夜跳空**：\(g_t = \ln(O_t/C_{t-1})\)（或相对价差），统计 \(\mathbb{E}[\lvert g_t\rvert]\) 与**大跳空占比**（如 \(\lvert g_t\rvert > \delta\)，\(\delta\) 默认如 1% 或 2%）。
-- **极端日内波动**：如 \(\lvert \ln(C_t/O_t)\rvert\) 或全日振幅 \((e^{\ln(H_t/L_t)} - 1)\)（若 H/L 可用）超过阈值的天数占比。
-- **输出列**：`mean_abs_gap`、`gap_tail_ratio`（或合并为 `gap_burden` 综合列 + 说明）。
-
-### 4.6 区间震荡占比（规则化 regime 代理，`range_time_ratio`）
-
-- **目的**：用 **可解释规则** 描述「价格在区间内摆动而非单边」的时间占比，吸收方案 2 的思想而避免黑箱分类器。
-- **建议定义（v1 默认，实现可微调）**：  
-  - 计算 **长均** \(MA_{L,t}\)（如 \(L=60\)）与 **短均** \(MA_{S,t}\)（如 \(S=20\)）。  
-  - 记「在区间内」条件为：\(\lvert C_t - MA_{L,t}\rvert / MA_{L,t} < b\) **且** \(\lvert MA_{S,t} - MA_{L,t}\rvert / MA_{L,t} < b_2\)（\(b,b_2\) 默认如 5% / 3%）。  
-  - `range_time_ratio` = 满足条件日数 / 有效日数。  
-- **解读**：占比高 → 更偏震荡，利于网格；**需与 trend 项联合阅读**（强趋势下均线本身漂移，可能虚高/虚低，故该列在解释文本中与 `trend_t` 联动）。
-
----
-
-## 5. 综合分（可选）
-
-- **默认**：主报告 **仍以分项原值为主**；综合分 **默认关闭** 或列名 `composite_optional`，避免读者只看一个数。  
-- **若开启**：固定权重线性组合，对 **已做符号统一后的分项** 加权，例如：  
-  - 正向：`range_time_ratio` 归一、`vol_comfort_score`、`acf1_ret`（若显著负则奖励，实现时按分位或截断处理避免噪声）。  
-  - 负向：`trend_t` 绝对值、`variance_ratio` 中大于 1 的部分、`gap_burden`。  
-- **权重**：写在配置文件与报告元数据，**不允许**在 v1 中按样本优化权重（避免过拟合叙事）。
-
----
-
-## 6. 人读产物
-
-### 6.1 主表
-
-- **格式**：CSV + 可选 Markdown 表（列顺序固定，便于 diff）。
-- **必有列**：`symbol`, `name`, `asset_type`, `as_of`, `effective_days`, `history_short`, `insufficient_data`, 以及 §4 各分项列；可选 `composite_optional`。
-- **排序**：默认按 **某一分项** 或 **综合分**（若启用）降序；提供配置项，**默认建议**按 **`range_time_ratio` 降序 + `trend_t` 绝对值升序** 的二级排序（更符合「网格」直觉）。
-
-### 6.2 规则生成解释（每标的 3～6 条短句）
-
-- **非 LLM**：由阈值与分项组合的规则模板生成中文短句，例如：  
-  - `trend_t` 超阈 → 「趋势检验显著：窗口内价格漂移较强，网格易踏空或反复单向补仓。」  
-  - `variance_ratio > 1` + `acf1_ret > 0` → 「收益持续性偏高：偏离随机震荡，网格假设偏弱。」  
-  - `vol_low` → 「实现波动偏低：格子理论空间可能不足。」  
-  - `gap_tail_ratio` 高 → 「隔夜跳空或大缺口较多：执行与挂单假设风险上升。」  
-- **长度**：每条一句，总长可控，便于粘贴到笔记或研报附录。
-
-### 6.3 固定风险提示（报告页眉或脚注）
-
-- 「分项与综合分仅描述 **历史统计特征**，不构成收益承诺；**股票与 ETF 同一公式下列值并列，跨类绝对值比较需谨慎**。」
-
----
-
-## 7. 架构与数据流（实现预留）
-
-```
-Universe 配置 → 拉取日 OHLCV → 窗口切片与清洗 → 分项计算（纯函数） → 合并总表 → 规则解释 → 导出 CSV/MD
+    def compute(self, ctx: FactorContext) -> dict[str, object]:
+        if ctx.insufficient:
+            return {"my_metric": float("nan")}
+        return {"my_metric": ...}
 ```
 
-- **纯函数层**：每个指标函数输入 `DataFrame` + 参数，输出标量或小幅 Series，**便于单元测试**。  
-- **编排**：单脚本或 CLI，配置用 YAML/JSON；**不**在 v1 要求接入 Web 服务。
+2. 在 `factors/registry.py` 的 `register_builtin_factors()` 中注册，或调用 `FactorRegistry.register(MyFactor())`。
+3. 在 JSON 配置的 `factors` 数组中加入 `"my_factor"`。
+
+**约定**：若 `sample_quality` 判定 `insufficient_data`，后续因子应返回 NaN 或跳过（引擎在 `insufficient` 时仍调用各因子，由因子自行处理）。
+
+### 2.4 排序
+
+配置示例：
+
+```json
+"sort": [
+  {"field": "range_time_ratio", "ascending": false},
+  {"field": "trend_t", "ascending": true}
+]
+```
+
+- 未配置 `sort` 时：仅按 `symbol` 字母序，保证输出稳定可 diff。
+- 字段不存在时：`sort_values` 行为与 Pandas 一致（列缺失则报错，配置需自检）。
+
+### 2.5 行情与复权
+
+- **路径**：与 `BacktestConfig` / `DataServer` 相同（`get_data_path()` → `cn/` 等）。
+- **加载**：`storage.load_stock`；**禁止** screener 直接拼 `cn/stocks/*.parquet` 路径绕过 storage。
+- **复权**：`RunConfig.fq`，默认 `"pre"`。从 `ptrade_adj_pre.parquet`（或 post）加载缓存；缺失时按标的从 `exrights` 现场计算（与 `adj_cache` 一致）。
+- **截止日**：`as_of` 截断索引后再做窗口切片。
 
 ---
 
-## 8. 测试与自检
+## 3. 数据与窗口（与 v1 统计口径一致）
 
-- **正确性**：选 1～2 个标的，手工 spreadsheet 对账 `rv_ann`、`acf1_ret`、方差比率。  
-- **边界**：全 NaN、单票长度恰为 `N_min`、窗口末尾大量停牌。  
-- **稳健性**：`as_of` 前后挪动 ±20 个交易日重跑，在文档中记录「名次敏感度」说明（无需自动化闸门）。
-
----
-
-## 9. 规格自检（v1.0 定稿前核对）
-
-- [x] 无未决「TBD」占位；可调参数均以默认值 + 配置项形式写明。  
-- [x] 与「B 解耦 / 日线 / A+ETF / 5 年窗口 / 人读单表」一致。  
-- [x] 新股与短历史：**标签化保留**，与确认方向一致。  
-- [x] 范围边界：分钟、逐标的网格回测、机读 Universe 已列为非目标。
+- **字段**：OHLCV；收益用对数收益 \(\ln(C_t/C_{t-1})\)。
+- **默认窗口**：W = 1250 交易日；`n_min_valid` 默认 500。
+- **短历史**：保留行，打 `history_short` / `insufficient_data`。
+- **可调参数**：集中在 `params`（`ScreenerParams`），各因子只读 `ctx.params`。
 
 ---
 
-## 10. 版本与路径
+## 4. 配置
+
+### 4.1 方式一：显式因子列表
+
+```json
+{
+  "market": "CN",
+  "fq": "pre",
+  "factors": ["meta", "sample_quality", "trend", "variance_ratio", "acf1", "volatility", "gap", "range_regime"],
+  "sort": [{"field": "range_time_ratio", "ascending": false}],
+  "explain": "grid_default",
+  "params": { "window_trading_days": 1250 },
+  "output_csv": "report.csv"
+}
+```
+
+### 4.2 方式二：预设 + 覆盖
+
+```json
+{
+  "preset": "grid_friendly_v1",
+  "sort": [{"field": "grid_friendly_score", "ascending": false}],
+  "fq": "pre"
+}
+```
+
+`preset` 展开为默认 `factors` / `explain`；顶层字段覆盖预设。
+
+### 4.3 CSV 演示模式
+
+设置 `ohlcv_glob` 时从外部 CSV 读行情（**不复权**，用于单测/演示）；生产全市场扫描 **不设置** `ohlcv_glob`。
+
+---
+
+## 5. 产物
+
+- **主表 CSV**：UTF-8 BOM；浮点默认 4 位小数；`explanations` 为规则拼接（可关闭 `explain: null`）。
+- **固定风险提示**（CLI  stdout）：跨 asset_type 比较需谨慎；分项非收益承诺。
+
+---
+
+## 6. CLI
+
+```bash
+python -m simtradelab.grid_screener --config examples/grid_screener/run_config.json
+```
+
+---
+
+## 7. 测试
+
+- 指标函数：合成序列对账（保留 `test_grid_screener_metrics.py`）。
+- 引擎：合成 OHLCV + 因子子集键存在。
+- 排序：`SortSpec` 多键顺序。
+- 复权：mock adj 因子，验证除权日前后 close 连续（可选，有 fixture 时）。
+
+---
+
+## 8. 版本
 
 | 项 | 内容 |
 |----|------|
-| 规格版本 | v1.0 |
-| 文档路径 | `SimTradeLab/my_docs/grid_friendly_screener/01-design.md` |
-| 后续 | 审阅通过后，单独起 `02-plan.md` 或走实施计划流程；实现代码目录在计划中再定 |
+| 规格版本 | v2.0 |
+| 路径 | `my_docs/grid_friendly_screener/01-design.md` |
+| 实现包 | `src/simtradelab/grid_screener/` |
 
----
-
-**变更说明**：若你调整默认阈值（\(\sigma_{\text{low/high}}\)、\(N_min\)、均线窗口）或启用综合分，请在变更记录中备注日期与原因，避免与历史报告不可比。
+**v1 → v2 变更**：可插拔因子/排序/解释；行情走复权管线；删除硬编码 `rows_to_sorted_frame` 默认排序。

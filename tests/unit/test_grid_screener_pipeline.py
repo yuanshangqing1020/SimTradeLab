@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
 
-from simtradelab.grid_screener.config import ScreenerParams, UniverseItem
+from simtradelab.grid_screener.config import RunConfig, ScreenerParams, UniverseItem
+from simtradelab.grid_screener.engine import compute_row
 from simtradelab.grid_screener.explain import explain_row
-from simtradelab.grid_screener.pipeline import compute_screener_row
 from simtradelab.grid_screener.report import rows_to_sorted_frame
+from simtradelab.grid_screener.sort_spec import SortKey, SortSpec
 
 
 def _synth(n: int = 600) -> pd.DataFrame:
@@ -19,11 +20,29 @@ def _synth(n: int = 600) -> pd.DataFrame:
     return pd.DataFrame({"open": open_, "high": high, "low": low, "close": close, "volume": vol}, index=idx)
 
 
-def test_compute_screener_row_has_expected_keys():
+def _cfg(**kwargs) -> RunConfig:
+    base = {
+        "factors": [
+            "meta",
+            "sample_quality",
+            "trend",
+            "variance_ratio",
+            "acf1",
+            "volatility",
+            "gap",
+            "range_regime",
+            "grid_score",
+        ],
+        "params": {"window_trading_days": 500, "n_min_valid": 200},
+    }
+    base.update(kwargs)
+    return RunConfig.model_validate(base)
+
+
+def test_compute_row_has_expected_keys():
     df = _synth(600)
     meta = UniverseItem(symbol="000001.SZ", name="Ping An Bank", asset_type="stock")
-    params = ScreenerParams(window_trading_days=500, n_min_valid=200)
-    row = compute_screener_row(df, meta, params)
+    row = compute_row(df, meta, _cfg())
     for k in (
         "symbol",
         "name",
@@ -46,6 +65,22 @@ def test_compute_screener_row_has_expected_keys():
         assert k in row
     assert row["insufficient_data"] in (True, False)
     assert row["effective_days"] <= 500
+
+
+def test_preset_grid_friendly_v1():
+    cfg = RunConfig.model_validate({"preset": "grid_friendly_v1"})
+    assert "grid_score" in cfg.factors
+    assert cfg.sort_spec().keys[0].field == "range_time_ratio"
+
+
+def test_sort_spec_multi_key():
+    rows = [
+        {"symbol": "A", "range_time_ratio": 0.1, "trend_t": 0.5},
+        {"symbol": "B", "range_time_ratio": 0.9, "trend_t": 0.1},
+    ]
+    spec = SortSpec(keys=[SortKey(field="range_time_ratio", ascending=False)])
+    df = rows_to_sorted_frame(rows, spec)
+    assert df.iloc[0]["symbol"] == "B"
 
 
 def test_explain_emits_zh_strings():
@@ -101,15 +136,6 @@ def test_format_export_table_rounds_floats():
     assert got["effective_days"].iloc[0] == 1250
 
 
-def test_rows_to_sorted_frame_sorts():
-    rows = [
-        {"symbol": "A", "range_time_ratio": 0.1, "trend_t": 0.5},
-        {"symbol": "B", "range_time_ratio": 0.9, "trend_t": 0.1},
-    ]
-    df = rows_to_sorted_frame(rows)
-    assert df.iloc[0]["symbol"] == "B"
-
-
 def test_write_csv_limits_float_width(tmp_path):
     from simtradelab.grid_screener.report import format_export_table, write_csv
 
@@ -119,3 +145,10 @@ def test_write_csv_limits_float_width(tmp_path):
     text = out.read_text(encoding="utf-8-sig")
     assert "1.2346" in text
     assert "1.23456789" not in text
+
+
+def test_factor_registry_unknown_raises():
+    from simtradelab.grid_screener.factors.registry import default_registry
+
+    with __import__("pytest").raises(KeyError):
+        default_registry().get("not_a_factor")
