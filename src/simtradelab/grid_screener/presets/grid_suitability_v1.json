@@ -1,0 +1,32 @@
+{
+  "factors": [
+    "meta",
+    "sample_quality",
+    "gss_volatility",
+    "gss_mean_reversion",
+    "gss_liquidity",
+    "gss_safety",
+    "gss_friction",
+    "gss_score"
+  ],
+  "sort": [
+    {"field": "gss_score", "ascending": false},
+    {"field": "gss_v", "ascending": false}
+  ],
+  "explain": "gss_default",
+  "fq": "pre",
+  "params": {
+    "window_trading_days": 252,
+    "n_min_valid": 120,
+    "gss": {
+      "adtv_min_yuan": 100000000,
+      "price_percentile_veto": 0.70,
+      "hv_min": 0.25,
+      "adx_max": 25,
+      "w_mean_reversion": 0.40,
+      "w_volatility": 0.30,
+      "w_safety": 0.20,
+      "w_friction": 0.10
+    }
+  }
+}

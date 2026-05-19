@@ -13,6 +13,23 @@ def _default_data_path() -> str | None:
     return None
 
 
+class GssParams(BaseModel):
+    """网格适宜度模型 (03-另一个思路.md) 阈值与权重。"""
+
+    adtv_min_yuan: float = Field(default=1e8, gt=0, description="日均成交额下限（元）")
+    price_percentile_veto: float = Field(default=0.70, gt=0, le=1.0, description="历史价位分位一票否决线")
+    hv_min: float = Field(default=0.25, gt=0, description="年化波动率参考下限")
+    adx_max: float = Field(default=25.0, gt=0, description="ADX 震荡市参考上限")
+    hurst_mean_revert_below: float = Field(default=0.5, gt=0, le=1.0)
+    atr_period: int = Field(default=14, ge=2)
+    adx_period: int = Field(default=14, ge=2)
+    adtv_lookback_days: int = Field(default=21, ge=5)
+    w_mean_reversion: float = Field(default=0.40, ge=0)
+    w_volatility: float = Field(default=0.30, ge=0)
+    w_safety: float = Field(default=0.20, ge=0)
+    w_friction: float = Field(default=0.10, ge=0)
+
+
 class ScreenerParams(BaseModel):
     window_trading_days: int = Field(default=1250, ge=50)
     n_min_valid: int = Field(default=500, ge=10)
@@ -25,6 +42,7 @@ class ScreenerParams(BaseModel):
     range_band_spread_vs_long: float = Field(default=0.03, gt=0)
     intraday_extreme_delta: float = Field(default=0.02, gt=0)
     enable_composite: bool = False
+    gss: GssParams = Field(default_factory=GssParams)
 
 
 class UniverseItem(BaseModel):

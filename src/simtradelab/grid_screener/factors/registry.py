@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from simtradelab.grid_screener.factors.base import Factor
 from simtradelab.grid_screener.factors.builtin import BUILTIN_FACTORS
+from simtradelab.grid_screener.factors.gss import GSS_FACTORS
 
 
 class FactorRegistry:
@@ -32,6 +33,6 @@ class FactorRegistry:
 
 def default_registry() -> FactorRegistry:
     reg = FactorRegistry()
-    for f in BUILTIN_FACTORS:
+    for f in (*BUILTIN_FACTORS, *GSS_FACTORS):
         reg.register(f)
     return reg
