@@ -336,6 +336,7 @@ class PtradeAPI:
         if not len(sorted_i8):
             return None
 
+        query_dt = pd.Timestamp(query_dt)
         exact_idx = date_dict.get(query_dt.value)
         if exact_idx is not None:
             return exact_idx
@@ -1062,7 +1063,7 @@ class PtradeAPI:
         stocks = [security] if is_single_stock else security
 
         if count is not None:
-            end_dt = pd.Timestamp(end_date) if end_date else self.context.current_dt
+            end_dt = pd.Timestamp(end_date) if end_date else pd.Timestamp(self.context.current_dt)
             result = {}
             for stock in stocks:
                 stock_df = self._get_stock_df_by_frequency(stock, frequency, fq=fq, base_dt=end_dt)
@@ -1089,7 +1090,7 @@ class PtradeAPI:
                 result[stock] = slice_df
         else:
             start_dt = pd.Timestamp(start_date) if start_date else None
-            end_dt = pd.Timestamp(end_date) if end_date else self.context.current_dt
+            end_dt = pd.Timestamp(end_date) if end_date else pd.Timestamp(self.context.current_dt)
 
             result = {}
             for stock in stocks:

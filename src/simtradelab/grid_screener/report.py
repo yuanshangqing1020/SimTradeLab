@@ -12,6 +12,30 @@ EXPORT_FLOAT_DECIMALS = 4
 _STRING_EXPORT_COLUMNS = frozenset({"symbol", "name", "asset_type", "explanations", "vol_band"})
 
 
+def _sanitize_cell(value: object) -> object:
+    """去掉 NUL 等控制字符，避免 Excel 将 CSV 识别为损坏的二进制文件。"""
+    if value is None:
+        return value
+    try:
+        if pd.isna(value):
+            return value
+    except (TypeError, ValueError):
+        pass
+    if not isinstance(value, str):
+        return value
+    return value.replace("\x00", "").replace("\r", " ").replace("\n", " ").strip()
+
+
+def sanitize_export_strings(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    out = df.copy()
+    for col in out.columns:
+        if col in _STRING_EXPORT_COLUMNS or out[col].dtype == object:
+            out[col] = out[col].map(_sanitize_cell)
+    return out
+
+
 def format_export_table(df: pd.DataFrame, float_decimals: int = EXPORT_FLOAT_DECIMALS) -> pd.DataFrame:
     if df.empty:
         return df
@@ -48,4 +72,5 @@ def write_csv(
 ) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     fmt = "%.{0}f".format(max(0, int(float_decimals)))
-    df.to_csv(path, index=False, encoding="utf-8-sig", float_format=fmt)
+    safe = sanitize_export_strings(df)
+    safe.to_csv(path, index=False, encoding="utf-8-sig", float_format=fmt)

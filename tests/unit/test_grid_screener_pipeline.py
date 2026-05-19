@@ -147,6 +147,17 @@ def test_write_csv_limits_float_width(tmp_path):
     assert "1.23456789" not in text
 
 
+def test_write_csv_strips_null_bytes_for_excel(tmp_path):
+    from simtradelab.grid_screener.report import write_csv
+
+    df = pd.DataFrame({"symbol": ["159001.SZ"], "name": ["保证金\x00\x00"], "x": [1.0]})
+    out = tmp_path / "rep.csv"
+    write_csv(df, out)
+    raw = out.read_bytes()
+    assert b"\x00" not in raw
+    assert "保证金" in raw.decode("utf-8-sig")
+
+
 def test_factor_registry_unknown_raises():
     from simtradelab.grid_screener.factors.registry import default_registry
 
