@@ -82,6 +82,19 @@ class ScreenerDataAPI:
             return ""
         return str(name).replace("\x00", "").strip()
 
+    def _needs_adj_a(self) -> bool:
+        return "grid_t_profit" in self.cfg.resolved_factors() and self.cfg.resolved_fq() is None
+
+    def _attach_adj_a(self, symbol: str, df: pd.DataFrame) -> pd.DataFrame:
+        cache = getattr(self._api.data_context, "adj_pre_cache", None) or {}
+        adj = cache.get(symbol)
+        if adj is None or not isinstance(adj, pd.DataFrame) or adj.empty or "adj_a" not in adj.columns:
+            return df
+        out = df.copy()
+        aligned = adj["adj_a"].reindex(out.index)
+        out["adj_a"] = aligned
+        return out
+
     def load_ohlcv(self, symbol: str) -> pd.DataFrame:
         df = self._api.get_price(
             symbol,
@@ -93,4 +106,6 @@ class ScreenerDataAPI:
         )
         if df is None or not isinstance(df, pd.DataFrame) or df.empty:
             return pd.DataFrame(columns=_OHLCV_FIELDS)
+        if self._needs_adj_a():
+            df = self._attach_adj_a(symbol, df)
         return df

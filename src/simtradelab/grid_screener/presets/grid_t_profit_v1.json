@@ -1,0 +1,27 @@
+{
+  "factors": [
+    "meta",
+    "sample_quality",
+    "grid_t_profit"
+  ],
+  "sort": [
+    {"field": "grid_t_profit_yuan", "ascending": false},
+    {"field": "grid_t_harvest_count", "ascending": false}
+  ],
+  "explain": "gtp_default",
+  "fq": "none",
+  "params": {
+    "window_trading_days": 1250,
+    "n_min_valid": 500,
+    "grid_t": {
+      "initial_amount": 100000,
+      "grid_step": 0.03,
+      "trade_amount": 10000,
+      "lot_size": 100,
+      "reserve_cash_ratio": 5.0,
+      "use_intraday_path": false,
+      "min_valid_price": 0.5,
+      "max_bad_bar_ratio": 0.05
+    }
+  }
+}

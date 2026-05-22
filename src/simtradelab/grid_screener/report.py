@@ -10,7 +10,7 @@ from simtradelab.grid_screener.sort_spec import SortSpec
 EXPORT_FLOAT_DECIMALS = 4
 
 _STRING_EXPORT_COLUMNS = frozenset(
-    {"symbol", "name", "asset_type", "explanations", "vol_band", "gss_veto_reason"}
+    {"symbol", "name", "asset_type", "explanations", "vol_band", "gss_veto_reason", "grid_t_veto_reason"}
 )
 
 

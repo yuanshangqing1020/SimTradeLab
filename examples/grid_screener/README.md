@@ -21,4 +21,16 @@ python -m simtradelab.grid_screener --config examples/grid_screener/run_config_g
 
 预设 `grid_suitability_v1`：因子 `gss_volatility` … `gss_score`，按 `gss_score` 降序。
 
+### 纯做T存钱罐网格回测 (Grid-T)
+
+聚宽「收银台模式」思路见 `my_docs/grid_friendly_screener/04-另一个思路2/思路.md`：对每只股票/ETF 独立跑 3% 等额网格，统计窗口内落袋现金利润并排序：
+
+```bash
+python -m simtradelab.grid_screener --config examples/grid_screener/run_config_grid_t.json
+```
+
+预设 `grid_t_profit_v1`：因子 `grid_t_profit`，按 `grid_t_profit_yuan` 降序。使用 **未复权** 日线收盘价（`fq: none`，对齐聚宽 `use_real_price=True`），并自动按 `adj_a` 在除权日缩放网格基准价。参数与 jq.py 默认一致（底仓 10 万、步长 3%、每格 1 万）。
+
+注意：全市场扫描为 **日线** 粒度，绝对利润通常低于聚宽 **分钟** 回测；结果更适合横向排序，不宜直接对比 jq 绝对金额。
+
 内置预设定义在 `src/simtradelab/grid_screener/presets/`，一般不必单独拷贝。

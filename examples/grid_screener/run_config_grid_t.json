@@ -1,0 +1,7 @@
+{
+  "preset": "grid_t_profit_v1",
+  "market": "CN",
+  "as_of": "2025-05-21",
+  "fq": "none",
+  "output_csv": "examples/grid_screener/out/report_grid_t.csv"
+}

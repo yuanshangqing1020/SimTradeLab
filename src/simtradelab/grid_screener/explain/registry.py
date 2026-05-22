@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from simtradelab.grid_screener.explain.grid_default import explain_grid_default
+from simtradelab.grid_screener.explain.gtp_default import explain_gtp_default
 from simtradelab.grid_screener.explain.gss_default import explain_gss_default
 
 ExplainFn = Callable[[dict[str, Any]], list[str]]
@@ -11,6 +12,7 @@ ExplainFn = Callable[[dict[str, Any]], list[str]]
 _REGISTRY: dict[str, ExplainFn] = {
     "grid_default": explain_grid_default,
     "gss_default": explain_gss_default,
+    "gtp_default": explain_gtp_default,
 }
 
 

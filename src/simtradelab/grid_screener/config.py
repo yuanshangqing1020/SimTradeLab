@@ -13,6 +13,24 @@ def _default_data_path() -> str | None:
     return None
 
 
+class GridTParams(BaseModel):
+    """纯做T存钱罐网格回测 (04-另一个思路2/jq.py) 参数。"""
+
+    initial_amount: float = Field(default=100_000.0, gt=0, description="初始底仓金额（元）")
+    grid_step: float = Field(default=0.03, gt=0, le=0.5, description="网格步长（比例）")
+    trade_amount: float = Field(default=10_000.0, gt=0, description="每次网格交易金额（元）")
+    lot_size: int = Field(default=100, ge=1, description="最小交易单位（股）")
+    open_commission: float = Field(default=0.0003, ge=0)
+    close_commission: float = Field(default=0.0003, ge=0)
+    close_tax: float = Field(default=0.0005, ge=0, description="卖出印花税（股票）")
+    min_commission: float = Field(default=5.0, ge=0)
+    reserve_cash_ratio: float = Field(default=5.0, gt=0, description="相对底仓的备用现金倍数")
+    use_intraday_path: bool = Field(default=False, description="日线是否用 OHLC 模拟日内路径")
+    min_valid_price: float = Field(default=0.5, gt=0, description="有效 OHLC 最低价格（元）")
+    max_bad_bar_ratio: float = Field(default=0.05, ge=0, le=1.0, description="无效 K 线占比上限，超过则否决")
+    max_grid_steps_per_price: int = Field(default=50, ge=1, description="单价位触网循环上限")
+
+
 class GssParams(BaseModel):
     """网格适宜度模型 (03-另一个思路.md) 阈值与权重。"""
 
@@ -43,6 +61,7 @@ class ScreenerParams(BaseModel):
     intraday_extreme_delta: float = Field(default=0.02, gt=0)
     enable_composite: bool = False
     gss: GssParams = Field(default_factory=GssParams)
+    grid_t: GridTParams = Field(default_factory=GridTParams)
 
 
 class UniverseItem(BaseModel):
