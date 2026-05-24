@@ -436,9 +436,14 @@ def render_report(
 
     start = df["timestamp"].min().strftime("%Y-%m-%d")
     end = df["timestamp"].max().strftime("%Y-%m-%d")
+    days = max((df["timestamp"].max() - df["timestamp"].min()).days, 1)
     total_profit = df["profit"].sum()
     total_trades = len(df)
-    profit_trades = df["profit"].notna().sum()
+    profit_trades = int(df["profit"].notna().sum())
+    daily_trades = total_trades / days
+    daily_profit_trades = profit_trades / days
+    avg_profit_per_trade = total_profit / profit_trades if profit_trades else 0.0
+    daily_profit = total_profit / days
 
     fig = plt.figure(figsize=(18, 17))
     fig.suptitle(f"{title}\n回测区间: {start} ~ {end}", fontsize=16, fontweight="bold", y=0.985)
@@ -598,11 +603,11 @@ def render_report(
 
     # 页脚摘要
     footer = (
-        f"总交易 {total_trades} 笔 | 落袋 {profit_trades} 笔 | "
-        f"累计做T利润 {total_profit:,.2f} 元 | "
-        f"日均 {total_profit / max((df['timestamp'].max() - df['timestamp'].min()).days, 1):.1f} 元"
+        f"回测 {days} 天 | 总交易 {total_trades} 笔 (日 {daily_trades:.2f} 次) | "
+        f"落袋 {profit_trades} 笔 (日 {daily_profit_trades:.2f} 次) | "
+        f"累计做T利润 {total_profit:,.2f} 元 (日 {daily_profit:.1f} 元 | 笔均 {avg_profit_per_trade:,.0f} 元)"
     )
-    fig.text(0.5, 0.01, footer, ha="center", fontsize=11, color="#374151")
+    fig.text(0.5, 0.01, footer, ha="center", fontsize=10, color="#374151")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, bbox_inches="tight", facecolor="white")
@@ -755,10 +760,14 @@ def print_console_summary(
     print("=" * 60)
     print(f"日志编码: {encoding}")
     print(f"回测区间: {start:%Y-%m-%d} ~ {end:%Y-%m-%d} ({days} 天)")
-    print(f"总交易笔数: {len(df)}")
-    print(f"落袋笔数: {df['profit'].notna().sum()}")
-    print(f"累计做T利润: {df['profit'].sum():,.2f} 元")
-    print(f"日均做T利润: {df['profit'].sum() / days:,.2f} 元")
+    profit_trades = int(df["profit"].notna().sum())
+    total_profit = df["profit"].sum()
+    print(f"总交易笔数: {len(df)} (日 {len(df) / days:.2f} 次)")
+    print(f"落袋笔数: {profit_trades} (日 {profit_trades / days:.2f} 次)")
+    print(f"累计做T利润: {total_profit:,.2f} 元")
+    print(f"日均做T利润: {total_profit / days:,.2f} 元")
+    if profit_trades:
+        print(f"笔均落袋利润: {total_profit / profit_trades:,.2f} 元")
     if not daily_portfolio.empty:
         end_assets = daily_portfolio["total_assets"].iloc[-1]
         end_position = daily_portfolio.iloc[-1]["position_value"] if "position_value" in daily_portfolio else 0
