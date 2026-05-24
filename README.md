@@ -7,7 +7,7 @@ English | [中文](README.zh-CN.md) | [Deutsch](README.de.md)
 [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 [![License: Commercial](https://img.shields.io/badge/License-Commercial--Available-red)](licenses/LICENSE-COMMERCIAL.md)
-[![Version](https://img.shields.io/badge/Version-2.11.0-orange.svg)](#)
+[![Version](https://img.shields.io/badge/Version-2.12.0-orange.svg)](#)
 [![PyPI](https://img.shields.io/pypi/v/simtradelab.svg)](https://pypi.org/project/simtradelab/)
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/simtradelab.svg)](https://pypi.org/project/simtradelab/)
 
@@ -83,36 +83,35 @@ config = BacktestConfig(
     end_date='2024-12-31',             # Backtest end date
 
     # --- Capital & Market ---
-    # initial_capital=100000.0,        # Starting capital (must be > 0)
-    # market='CN',                     # Market: 'CN' (A-shares) | 'US'
-    # broker_profile='auto',           # Broker API profile: 'auto' | 'guosheng' | 'dongguan' | 'shanxi'
-    # t_plus_1=None,                   # T+1 override: None=market default (CN=True, US=False)
-    # benchmark_code='',               # Benchmark code, empty=market default
+    initial_capital=100000.0,          # Starting capital (must be > 0)
+    market='CN',                       # Market: 'CN' (A-shares) | 'US'
+    broker_profile='auto',             # Broker API profile: 'auto' | 'guosheng' | 'dongguan' | 'shanxi'
+    t_plus_1=None,                     # T+1 override: None=market default (CN=True, US=False)
+    benchmark_code='',                 # Benchmark code, empty=market default
 
     # --- Frequency ---
-    # frequency='1d',                  # Bar frequency: '1d' (daily) | '1m' (minute)
+    frequency='1d',                    # Bar frequency: '1d' (daily) | '1m' (minute)
 
     # --- Paths ---
-    # data_path='~/.simtradelab/data', # Market data directory
-    # strategies_path='./strategies',  # Strategies root directory
+    data_path='~/.simtradelab/data',   # Market data directory
+    strategies_path='./strategies',    # Strategies root directory
 
     # --- Performance ---
-    # enable_multiprocessing=True,     # Enable parallel data loading
-    # num_workers=None,                # Worker count (None=auto, must be >= 1)
-    # use_data_server=True,            # Use in-memory data server (singleton)
+    enable_multiprocessing=True,       # Enable parallel data loading
+    num_workers=None,                  # Worker count (None=auto, must be >= 1)
+    use_data_server=True,              # Use in-memory data server (singleton)
 
     # --- Output ---
-    # enable_charts=True,              # Generate PNG chart
-    # enable_logging=True,             # Write log file
-    # enable_export=False,             # Export trade details to CSV
+    enable_charts=True,                # Generate PNG chart
+    enable_logging=True,               # Write log file
+    enable_export=False,               # Export trade details to CSV
 
-    # --- Sandbox & i18n ---
-    # sandbox=True,                    # PTrade sandbox: restrict imports & builtins
-    # locale='auto',                   # Log language: 'zh' | 'en' | 'de' (auto: CN market→zh, else system locale)
-    # optimization_mode=False,         # Optimization mode: skip strategy validation/data analysis/logging setup
+    # --- i18n ---
+    locale='auto',                     # Log language: 'zh' | 'en' | 'de' (auto: CN market→zh, else system locale)
+    optimization_mode=False,           # Optimization mode: skip validation/logging (managed by optimizer)
 
     # --- Entry file ---
-    # strategy_file='backtest.py',     # Entry file: 'backtest.py' | 'live.py'
+    strategy_file='backtest.py',       # Entry file: 'backtest.py' | 'live.py'
 )
 runner = BacktestRunner()
 report = runner.run(config=config)
